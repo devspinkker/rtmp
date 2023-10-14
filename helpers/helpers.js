@@ -8,6 +8,7 @@ ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
 
 var probe = require('node-ffprobe');
 var thumbler = require('video-thumb');
+const { log } = require('console');
 
 cloudinary.config({
     cloud_name: process.env.CLOUD_NAME,
@@ -17,12 +18,13 @@ cloudinary.config({
 
 let url_stream = process.env.BACKEND_URL + "/stream";
 
-async function updateThumbnail(id, image) {
+async function updateThumbnail(image, cmt) {
     try {
-        const res = await axios.post(`${url_stream}/update_thumbnail/${id}`, { image });
+        const res = await axios.post(`${url_stream}/update_thumbnail`, { image: image, cmt: cmt });
         return res;
     } catch (error) {
         console.error('Error while calling updateThumbnail', error.message);
+        return
     }
 }
 
@@ -37,7 +39,7 @@ async function createVod(url, stream_key) {
     }
 }
 
-const generateStreamThumbnail = async (stream_key, streamer) => {
+const generateStreamThumbnail = async (stream_key, cmt) => {
     setTimeout(async () => {
         const thumbnailPath = process.env.LIVE_FOLDER + stream_key + '.png';
         const args = [
@@ -57,16 +59,14 @@ const generateStreamThumbnail = async (stream_key, streamer) => {
             }).unref();
 
             setTimeout(() => {
-                console.log("Ahora esto ");
                 cloudinary.v2.uploader.upload(thumbnailPath, {
                     folder: 'min', crop: "fill"
                 }, async (err, result) => {
                     if (err) {
                         console.error('Error uploading to Cloudinary:', err.message);
                     } else {
-                        await updateThumbnail(streamer, result.secure_url);
-                        console.log(result.secure_url);
 
+                        await updateThumbnail(result.secure_url, cmt);
                         setTimeout(() => {
                             removeTmp(thumbnailPath);
                         }, 5000);

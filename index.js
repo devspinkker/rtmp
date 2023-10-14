@@ -25,7 +25,7 @@ app.use(cors());
 const config = {
   rtmp: {
     port: 1935,
-    chunk_size: 60000,
+    chunk_size: 1000,
     gop_cache: true,
     ping: 60,
     ping_timeout: 30
@@ -59,7 +59,7 @@ const config = {
       }
     ]
   },
-  /*fission: {
+  fission: {
     ffmpeg: process.env.FFMPEG_PATH,
     tasks: [
       {
@@ -86,7 +86,7 @@ const config = {
         ]
       },
     ]
-  }*/
+  }
 };
 
 let url = process.env.BACKEND_URL + "/stream";
@@ -165,14 +165,10 @@ nms.on('prePublish', async (id, StreamPath, args) => {
   } else {
     totalKey = key;
   }
-  console.log(key);
   const user = await getUserByKey(key);
 
   const session = nms.getSession(id);
-  console.log("args.token");
-  console.log(args.token);
 
-  console.log("args.token");
   if (!user) {
     console.log("[Pinkker] Usuario no encontrado");
   } else if (args.token == user.cmt) {
@@ -195,7 +191,7 @@ nms.on('prePublish', async (id, StreamPath, args) => {
       await updateTimeStart(user.keyTransmission, date);
       const rtmpUrl = `rtmp://localhost:1935/live/${totalKey}`;
       console.log(rtmpUrl);
-      await helpers.generateStreamThumbnail(totalKey, user.NameUser);
+      await helpers.generateStreamThumbnail(totalKey, user.cmt);
       console.log('[Pinkker] [PrePublish] Inicio del Stream para ' + user.NameUser + "con la clave " + totalKey);
       return;
     }
