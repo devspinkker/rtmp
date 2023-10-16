@@ -8,7 +8,6 @@ ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
 
 var probe = require('node-ffprobe');
 var thumbler = require('video-thumb');
-const { log } = require('console');
 
 cloudinary.config({
     cloud_name: process.env.CLOUD_NAME,
@@ -42,6 +41,7 @@ async function createVod(url, stream_key) {
 const generateStreamThumbnail = async (stream_key, cmt) => {
     setTimeout(async () => {
         const thumbnailPath = process.env.LIVE_FOLDER + stream_key + '.png';
+
         const args = [
             '-y',
             '-i', process.env.LIVE_URL + '/live/' + stream_key + '/index.m3u8',
@@ -53,6 +53,9 @@ const generateStreamThumbnail = async (stream_key, cmt) => {
         ];
 
         try {
+            console.log("thumbnailPath");
+            console.log(thumbnailPath);
+            console.log("thumbnailPath");
             await spawn(cmd, args, {
                 detached: true,
                 stdio: 'ignore'
@@ -80,9 +83,17 @@ const generateStreamThumbnail = async (stream_key, cmt) => {
 };
 
 const uploadStream = async (file_name, stream_key) => {
+    const filePath = process.env.MEDIA_FOLDER + stream_key + "/" + file_name;
+
+    // Verificar si el archivo existe
+    if (!fs.existsSync(filePath)) {
+        console.error('Error uploading to Cloudinary: El archivo no existe -', filePath);
+        return;
+    }
+
     setTimeout(() => {
         console.log("Subiendo el vod " + file_name);
-        cloudinary.v2.uploader.upload(process.env.MEDIA_FOLDER + stream_key + "/" + file_name, {
+        cloudinary.v2.uploader.upload(filePath, {
             folder: 'vods',
             resource_type: 'video',
             video_resolution: '480p',
@@ -106,6 +117,7 @@ const uploadStream = async (file_name, stream_key) => {
         });
     }, 10000);
 };
+
 
 function getNewestFile(files, path) {
     console.log(path);

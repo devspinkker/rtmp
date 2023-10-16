@@ -25,7 +25,7 @@ app.use(cors());
 const config = {
   rtmp: {
     port: 1935,
-    chunk_size: 1000,
+    chunk_size: 4000,
     gop_cache: true,
     ping: 60,
     ping_timeout: 30
@@ -59,34 +59,34 @@ const config = {
       }
     ]
   },
-  fission: {
-    ffmpeg: process.env.FFMPEG_PATH,
-    tasks: [
-      {
-        rule: "live/*",
-        model: [
-          {
-            ab: "128k",
-            vb: "1500k",
-            vs: "1280x720",
-            vf: "30",
-          },
-          {
-            ab: "96k",
-            vb: "1000k",
-            vs: "854x480",
-            vf: "24",
-          },
-          {
-            ab: "96k",
-            vb: "600k",
-            vs: "640x360",
-            vf: "20",
-          },
-        ]
-      },
-    ]
-  }
+  // fission: {
+  //   ffmpeg: process.env.FFMPEG_PATH,
+  //   tasks: [
+  //     {
+  //       rule: "live/*",
+  //       model: [
+  //         {
+  //           ab: "128k",
+  //           vb: "1500k",
+  //           vs: "1280x720",
+  //           vf: "30",
+  //         },
+  //         {
+  //           ab: "96k",
+  //           vb: "1000k",
+  //           vs: "854x480",
+  //           vf: "24",
+  //         },
+  //         {
+  //           ab: "96k",
+  //           vb: "600k",
+  //           vs: "640x360",
+  //           vf: "20",
+  //         },
+  //       ]
+  //     },
+  //   ]
+  // }
 };
 
 let url = process.env.BACKEND_URL + "/stream";
@@ -220,11 +220,11 @@ nms.on('donePublish', async (id, StreamPath, args) => {
   streams.delete(user);
 
 
-  /*await fs.readdir("./media/live/" + key.substring(4, key.length), function (err, archivos) {
+  await fs.readdir("./media/live/" + key.substring(4, key.length), function (err, archivos) {
     if (err) { throw console.log(err); }
     var videoFile = getNewestFile(archivos, "./media/live/" + key.substring(4, key.length));
     helpers.uploadStream(videoFile, key.substring(4, key.length));
-  });*/
+  });
 
   console.log("[Pinkker] [DonePublish] End stream for " + user + " with key " + key);
 });
