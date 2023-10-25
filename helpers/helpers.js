@@ -53,9 +53,6 @@ const generateStreamThumbnail = async (stream_key, cmt) => {
         ];
 
         try {
-            console.log("thumbnailPath");
-            console.log(thumbnailPath);
-            console.log("thumbnailPath");
             await spawn(cmd, args, {
                 detached: true,
                 stdio: 'ignore'
