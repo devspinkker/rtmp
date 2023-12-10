@@ -2,9 +2,7 @@ require('dotenv').config()
 const NodeMediaServer = require('node-media-server');
 const cors = require("cors");
 const express = require("express");
-const request = require("request");
 const axios = require("axios");
-const spawn = require('child_process').spawn, cmd = process.env.FFMPEG_PATH;
 const app = express();
 
 const helpers = require('./helpers/helpers');
@@ -14,13 +12,12 @@ const keys = new Map();
 
 const getUserByKey = require("./controllers/userCtrl");
 
-const { addStream, removeStream, getStream } = require('./helpers/livestreamHelper');
 var fs = require('fs');
-const { log } = require('console');
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cors());
+app.use("/recortarYSubirClip", require("./routes/index.routes"))
 
 const config = {
   rtmp: {
@@ -119,6 +116,7 @@ async function addHistoryViewers(streamer) {
     console.log('Error while calling getViewers', error);
   }
 }
+
 
 async function resumeStream(streamer) {
   try {
@@ -248,5 +246,7 @@ function getNewestFile(files, path) {
   return (out.length > 0) ? out[0].file : "";
 }
 
-
 nms.run();
+app.listen(8002, () => {
+  console.log(`server on port 8002`)
+})

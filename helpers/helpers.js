@@ -3,11 +3,12 @@ const cmd = process.env.FFMPEG_PATH;
 const cloudinary = require('cloudinary');
 const fs = require('fs');
 const axios = require("axios");
+const path = require('path');
+
 const ffmpeg = require('fluent-ffmpeg');
+
 ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
 
-var probe = require('node-ffprobe');
-var thumbler = require('video-thumb');
 
 cloudinary.config({
     cloud_name: process.env.CLOUD_NAME,
@@ -144,7 +145,73 @@ const removeTmp = (path) => {
     });
 };
 
+
+
+const recortarYSubirClip = async (streamerKey, inicio, fin) => {
+    return new Promise(async (resolve, reject) => {
+        const inputFilePath = process.env.LIVE_URL + '/live/' + streamerKey + '/index.m3u8';
+        const outputFolder = process.env.MEDIA_FOLDER + streamerKey + '/';
+
+        if (!fs.existsSync(outputFolder)) {
+            fs.mkdirSync(outputFolder, { recursive: true });
+        }
+        const outputFilePath = path.normalize(process.env.MEDIA_FOLDER + streamerKey + '/recortado_' + streamerKey + '.mp4');
+
+        const ffmpegProcess = spawn(process.env.FFMPEG_PATH, [
+            '-y',
+            '-i', inputFilePath,
+            '-ss', inicio,
+            '-to', fin,
+            '-c:v', 'libx264',
+            '-c:a', 'aac',
+            '-strict', 'experimental',
+            outputFilePath,
+        ]);
+        ffmpegProcess.on('close', async (code) => {
+            console.log('FFmpeg process exited with code:', code);
+
+            if (code === 0) {
+                try {
+                    const secureUrl = await uploadClipToCloudinary(outputFilePath);
+                    resolve('Clip recortado y subido correctamente. URL: ' + secureUrl);
+                } catch (uploadError) {
+                    console.error('Error al subir el clip a Cloudinary:', uploadError.message);
+                    reject('Error al subir el clip: ' + uploadError.message);
+                }
+            } else {
+                console.error('Error al recortar el clip con FFmpeg.');
+                reject('Error al recortar el clip.');
+            }
+        });
+    });
+}
+
+const uploadClipToCloudinary = async (filePath) => {
+    return new Promise((resolve, reject) => {
+
+        cloudinary.v2.uploader.upload(filePath, {
+            folder: 'clips',
+            resource_type: 'video',
+            format: 'mp4',
+            audio_codec: 'aac',
+            audio_bitrate: '128k',
+            audio_channels: 2,
+            audio_samplerate: 44100,
+            audio_volume: '-10dB'
+        }, (err, result) => {
+            if (err) {
+                console.error('Error uploading to Cloudinary:', err.message);
+                reject(new Error('Error uploading to Cloudinary: ' + err.message));
+            } else {
+                console.log(result.secure_url);
+                resolve(result.secure_url);
+            }
+        });
+    });
+}
+
 module.exports = {
     generateStreamThumbnail: generateStreamThumbnail,
-    uploadStream: uploadStream
+    uploadStream: uploadStream,
+    recortarYSubirClip
 };
