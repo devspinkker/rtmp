@@ -13,25 +13,28 @@ cloudinary.config({
 
 const CreateClips = async (req, res) => {
     const { video, start, end } = req.body;
-
     try {
         const tempDir = path.join(__dirname, 'temp');
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir);
-        }
 
-        // Guardar el video completo en un archivo temporal
+        const directories = tempDir.split(path.sep);
+        let currentDirectory = '';
+
+        directories.forEach((directory) => {
+            currentDirectory = path.join(currentDirectory, directory);
+            if (!fs.existsSync(currentDirectory)) {
+                fs.mkdirSync(currentDirectory);
+            }
+        });
+
         const videoPath = path.join(tempDir, 'input.mp4');
-        fs.writeFileSync(videoPath, Buffer.from(video, 'base64'));
+        fs.writeFileSync(videoPath, Buffer.from(video));
 
-        // Definir el nombre y la ubicación del archivo de salida recortado
         const outputFilePath = path.join(tempDir, 'output.mp4');
 
-        // Realizar el recorte utilizando fluent-ffmpeg
         await new Promise((resolve, reject) => {
             ffmpeg(videoPath)
                 .setStartTime(0)
-                .setDuration(46)
+                .setDuration(60)
                 .output(outputFilePath)
                 .on('end', () => {
                     resolve();
@@ -43,22 +46,19 @@ const CreateClips = async (req, res) => {
                 .run();
         });
 
-        // Subir el video recortado a Cloudinary
         const cloudinaryResponse = await cloudinary.uploader.upload(outputFilePath, {
             resource_type: 'video',
             folder: 'recortes',
             overwrite: true,
         });
 
-        // Imprimir la URL desde la respuesta de Cloudinary
         console.log(cloudinaryResponse.secure_url);
 
-        // Enviar la URL de Cloudinary como respuesta
         res.status(200).json({ url: cloudinaryResponse.secure_url });
     } catch (error) {
         console.error('Error en la ruta de recorte:', error);
         res.status(500).send('Error interno en la ruta de recorte.');
     }
-}
+};
 
 module.exports = CreateClips;

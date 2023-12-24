@@ -147,33 +147,51 @@ const { PassThrough } = require('stream');
 
 function convertToMP4(chunks, totalKeyreq) {
   return new Promise((resolve, reject) => {
-    const ffmpegProcess = ffmpeg();
-    const inputStream = new PassThrough();
-    chunks.forEach(chunk => inputStream.write(chunk));
-    inputStream.end();
+    try {
+      const mediaDir = path.join(__dirname, 'media');
+      const clipsDir = path.join(mediaDir, 'clips');
 
-    const outputFilePath = path.join(__dirname, 'media', 'clips', `salida_${totalKeyreq}.mp4`);
+      // Verificar y crear directorios necesarios
+      if (!fs.existsSync(mediaDir)) {
+        fs.mkdirSync(mediaDir);
+      }
 
-    ffmpegProcess
-      .input(inputStream)
-      .inputFormat('mpegts')
-      .videoCodec('copy')
-      .audioCodec('copy')
-      .toFormat('mp4')
-      .outputOptions(['-movflags', 'frag_keyframe+empty_moov'])
-      .outputOptions(['-bsf:a', 'aac_adtstoasc'])
-      .output(outputFilePath)
-      .on('end', () => {
-        resolve(outputFilePath);
-      })
-      .on('error', (err, stdout, stderr) => {
-        console.error(`Error al convertir a MP4: ${err.message || err}`);
-        console.error(`Salida de error detallada: ${stderr}`);
-        reject(new Error(`Error al convertir a MP4: ${err.message || err}`));
-      })
-      .run();
+      if (!fs.existsSync(clipsDir)) {
+        fs.mkdirSync(clipsDir);
+      }
+
+      const ffmpegProcess = ffmpeg();
+      const inputStream = new PassThrough();
+      chunks.forEach(chunk => inputStream.write(chunk));
+      inputStream.end();
+
+      const outputFilePath = path.join(clipsDir, `salida_${totalKeyreq}.mp4`);
+
+      ffmpegProcess
+        .input(inputStream)
+        .inputFormat('mpegts')
+        .videoCodec('copy')
+        .audioCodec('copy')
+        .toFormat('mp4')
+        .outputOptions(['-movflags', 'frag_keyframe+empty_moov'])
+        .outputOptions(['-bsf:a', 'aac_adtstoasc'])
+        .output(outputFilePath)
+        .on('end', () => {
+          resolve(outputFilePath);
+        })
+        .on('error', (err, stdout, stderr) => {
+          console.error(`Error al convertir a MP4: ${err.message || err}`);
+          console.error(`Salida de error detallada: ${stderr}`);
+          reject(new Error(`Error al convertir a MP4: ${err.message || err}`));
+        })
+        .run();
+    } catch (error) {
+      console.error('Error en la función convertToMP4:', error);
+      reject(new Error('Error interno en la conversión a MP4.'));
+    }
   });
 }
+
 
 // En tu ruta
 app.get('/getBuffer/:totalKey', async (req, res) => {
