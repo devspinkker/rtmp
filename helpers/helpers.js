@@ -145,50 +145,8 @@ const removeTmp = (path) => {
     });
 };
 
-
-
-const recortarYSubirClip = async (streamerKey, inicio, fin) => {
-    return new Promise(async (resolve, reject) => {
-        const inputFilePath = process.env.LIVE_URL + '/live/' + streamerKey + '/index.m3u8';
-        const outputFolder = process.env.MEDIA_FOLDER + streamerKey + '/';
-
-        if (!fs.existsSync(outputFolder)) {
-            fs.mkdirSync(outputFolder, { recursive: true });
-        }
-        const outputFilePath = path.normalize(process.env.MEDIA_FOLDER + streamerKey + '/recortado_' + streamerKey + '.mp4');
-
-        const ffmpegProcess = spawn(process.env.FFMPEG_PATH, [
-            '-y',
-            '-i', inputFilePath,
-            '-ss', inicio,
-            '-to', fin,
-            '-c:v', 'libx264',
-            '-c:a', 'aac',
-            '-strict', 'experimental',
-            outputFilePath,
-        ]);
-        ffmpegProcess.on('close', async (code) => {
-            console.log('FFmpeg process exited with code:', code);
-
-            if (code === 0) {
-                try {
-                    const secureUrl = await uploadClipToCloudinary(outputFilePath);
-                    resolve('Clip recortado y subido correctamente. URL: ' + secureUrl);
-                } catch (uploadError) {
-                    console.error('Error al subir el clip a Cloudinary:', uploadError.message);
-                    reject('Error al subir el clip: ' + uploadError.message);
-                }
-            } else {
-                console.error('Error al recortar el clip con FFmpeg.');
-                reject('Error al recortar el clip.');
-            }
-        });
-    });
-}
-
 const uploadClipToCloudinary = async (filePath) => {
     return new Promise((resolve, reject) => {
-
         cloudinary.v2.uploader.upload(filePath, {
             folder: 'clips',
             resource_type: 'video',
@@ -210,8 +168,9 @@ const uploadClipToCloudinary = async (filePath) => {
     });
 }
 
+
 module.exports = {
     generateStreamThumbnail: generateStreamThumbnail,
     uploadStream: uploadStream,
-    recortarYSubirClip
+
 };
