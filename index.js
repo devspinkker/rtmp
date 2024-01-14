@@ -16,13 +16,7 @@ const getUserByKey = require("./controllers/userCtrl");
 var fs = require('fs');
 const spawn = require('child_process').spawn;
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
-
 app.use(cors());
-
-app.use("/recortarYSubirClip", require("./routes/index.routes"))
-
 
 const config = {
   rtmp: {
@@ -92,16 +86,15 @@ const config = {
 
 let url = process.env.BACKEND_URL + "/stream";
 
-
 async function updateOnline(Key, online) {
   try {
-    const res = await axios.post(`${url}/update_online`, { Key, State: online })
+    const res = await axios.post(`${url}/update_online`, { Key, State: online });
     return res;
   } catch (error) {
-    console.log('Error while calling updateOnline', error)
+    console.log('Error en updateOnline:', error.message);
+    throw new Error('Error en updateOnline');
   }
 }
-
 
 async function updateTimeStart({ keyTransmission, date }) {
   try {
@@ -120,7 +113,6 @@ async function addHistoryViewers(streamer) {
     console.log('Error while calling getViewers', error);
   }
 }
-
 
 async function resumeStream(streamer) {
   try {
@@ -142,8 +134,8 @@ async function getStreamingsOnline() {
   }
 }
 
-
 const { PassThrough } = require('stream');
+const { log } = require('console');
 
 function convertToMP4(chunks, totalKeyreq) {
   return new Promise((resolve, reject) => {
@@ -151,7 +143,6 @@ function convertToMP4(chunks, totalKeyreq) {
       const mediaDir = path.join(__dirname, 'media');
       const clipsDir = path.join(mediaDir, 'clips');
 
-      // Verificar y crear directorios necesarios
       if (!fs.existsSync(mediaDir)) {
         fs.mkdirSync(mediaDir);
       }
@@ -180,120 +171,70 @@ function convertToMP4(chunks, totalKeyreq) {
           resolve(outputFilePath);
         })
         .on('error', (err, stdout, stderr) => {
-          console.error(`Error al convertir a MP4: ${err.message || err}`);
-          console.error(`Salida de error detallada: ${stderr}`);
-          reject(new Error(`Error al convertir a MP4: ${err.message || err}`));
+          next(stderr);
         })
         .run();
     } catch (error) {
-      console.error('Error en la función convertToMP4:', error);
-      reject(new Error('Error interno en la conversión a MP4.'));
+      next(error);
     }
   });
 }
 
-
-// En tu ruta
 app.get('/getBuffer/:totalKey', async (req, res) => {
   const totalKeyreq = req.params.totalKey;
   const currentFolder = process.cwd();
   const mediaFolder = path.join(currentFolder, 'media', 'live', totalKeyreq);
 
-  const chunks = getChunksFromFolder(mediaFolder);
+  try {
+    const chunks = await getChunksFromFolder(mediaFolder);
 
-  if (chunks.length > 0) {
-    try {
+    if (chunks !== null && chunks.length > 0) {
       const mp4Buffer = await convertToMP4(chunks, totalKeyreq);
 
       const fileStream = fs.createReadStream(mp4Buffer);
-      fileStream.pipe(res);
 
-    } catch (error) {
-      console.error('Error al convertir a MP4:', error);
-      res.status(500).send('Error interno al convertir a MP4.');
+      fileStream.on('error', (error) => {
+        return res.status(500).send('Error interno al procesar la solicitud.');
+      });
+
+      fileStream.pipe(res);
+    } else {
+      return res.status(404).send('El streamer está offline o no hay búfer disponible.');
     }
-  } else {
-    res.status(404).send('No hay búfer para la transmisión especificada.');
+  } catch (error) {
+    return res.status(500).send('Error interno al procesar la solicitud.');
   }
 });
 
-
-
-
-
-
-
 function getChunksFromFolder(folderPath) {
-  const files = fs.readdirSync(folderPath);
-  const tsFiles = files.filter(file => file.endsWith('.ts'));
+  return new Promise(async (resolve, reject) => {
+    try {
+      const isFolderExists = await fs.promises.access(folderPath, fs.constants.F_OK)
+        .then(() => true)
+        .catch(() => false);
 
-  return tsFiles.map(file => {
-    const filePath = path.join(folderPath, file);
-    return fs.readFileSync(filePath);
+      if (!isFolderExists) {
+        resolve(null);
+        return;
+      }
+
+      const files = await fs.promises.readdir(folderPath);
+      const tsFiles = files.filter(file => file.endsWith('.ts'));
+
+      const chunks = await Promise.all(tsFiles.map(async file => {
+        const filePath = path.join(folderPath, file);
+        return fs.promises.readFile(filePath);
+      }));
+
+      resolve(chunks);
+      return
+
+    } catch (error) {
+      reject(error);
+      return
+    }
   });
 }
-
-// app.get('/getBuffer/:totalKey', async (req, res) => {
-//   const totalKeyreq = req.params.totalKey;
-//   const currentFolder = process.cwd();
-//   const outputFolder = path.join(currentFolder, 'media', 'clips');
-//   const outputFilePath = path.join(outputFolder, `output_${totalKeyreq}.ts`);
-
-//   if (videoBuffers.has(totalKeyreq)) {
-//     let resFunc = await generateVideoInBackground(totalKeyreq, outputFilePath);
-//     console.log(resFunc);
-//     console.log(resFunc);
-//     res.status(200).json({ "ok": "ok" });
-//   } else {
-//     res.status(404).send('No hay búfer para la transmisión especificada.');
-//   }
-// });
-// const MAX_BUFFER_SIZE = 60;
-
-// const captureAndProcessVideo = (totalKey) => {
-//   if (!videoBuffers.has(totalKey)) {
-//     videoBuffers.set(totalKey, new CircularBuffer(MAX_BUFFER_SIZE));
-//   }
-//   const currentFolder = process.cwd();
-//   const newSecondOfVideo = path.join(currentFolder, 'media', 'live', totalKey, 'index.m3u8');
-//   videoBuffers.get(totalKey).enq({ key: totalKey, timestamp: Date.now(), fragment: newSecondOfVideo });
-// };
-
-// const generateVideoInBackground = (totalKey, outputFilePath) => {
-//   const buffer = videoBuffers.get(totalKey);
-
-//   if (buffer && buffer.size() >= MAX_BUFFER_SIZE) {
-//     buffer.deq(buffer.size() - MAX_BUFFER_SIZE);
-
-//     const ffmpegProcess = spawn(process.env.FFMPEG_PATH, [
-//       '-y',
-//       ...buffer.toarray().flatMap(entry => ['-i', entry.fragment]),
-//       '-filter_complex', `concat=n=${buffer.size()}:v=1:a=1`,
-//       '-c:v', 'libx264',
-//       '-c:a', 'aac',
-//       '-strict', 'experimental',
-//       '-t', '60',
-//       outputFilePath,
-//     ]);
-
-//     ffmpegProcess.on('close', (code) => {
-//       if (code === 0) {
-//         console.log("Generación de video exitosa.");
-//       } else {
-//         console.log(`Error en la generación de video. Código de salida: ${code}`);
-//       }
-//     });
-//   } else {
-//     console.log("No hay suficientes datos en el buffer para generar el video.");
-//   }
-// };
-
-// setInterval(() => {
-//   streams.forEach((totalKey, username) => {
-//     console.log("c");
-//     captureAndProcessVideo(totalKey);
-//   });
-// }, 1000);
 
 var nms = new NodeMediaServer(config);
 
@@ -400,6 +341,31 @@ nms.on('prePublish', async (id, StreamPath, args) => {
   session.reject();
 });
 
+nms.on('donePublish', async (id, StreamPath, args) => {
+  const key = StreamPath.replace(/\//g, '');
+
+  let totalKey;
+
+  if (key.length === 49) {
+    totalKey = key.substring(4, key.length);
+  } else {
+    totalKey = key;
+  }
+
+  const user = await getUserByKey(key);
+
+  if (user) {
+    const streamerName = keys.get(totalKey);
+
+    if (streamerName) {
+      streams.delete(streamerName);
+      keys.delete(totalKey);
+
+      await updateOnline(user.keyTransmission, false);
+      console.log('[Pinkker] [donePublish] Stream apagado para ' + streamerName + ' con la clave ' + totalKey);
+    }
+  }
+});
 
 function getNewestFile(files, path) {
   var out = [];
