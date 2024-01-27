@@ -52,36 +52,36 @@ const config = {
         dash: false,
       }
     ]
-  }
+  },
 
-  // fission: {
-  //   ffmpeg: process.env.FFMPEG_PATH,
-  //   tasks: [
-  //     {
-  //       rule: "live/*",
-  //       model: [
-  //         {
-  //           ab: "128k",
-  //           vb: "1500k",
-  //           vs: "1280x720",
-  //           vf: "30",
-  //         },
-  //         {
-  //           ab: "96k",
-  //           vb: "1000k",
-  //           vs: "854x480",
-  //           vf: "24",
-  //         },
-  //         {
-  //           ab: "96k",
-  //           vb: "600k",
-  //           vs: "640x360",
-  //           vf: "20",
-  //         },
-  //       ]
-  //     },
-  //   ]
-  // }
+  fission: {
+    ffmpeg: process.env.FFMPEG_PATH,
+    tasks: [
+      {
+        rule: "live/*",
+        model: [
+          {
+            ab: "128k",
+            vb: "1500k",
+            vs: "1280x720",
+            vf: "30",
+          },
+          {
+            ab: "96k",
+            vb: "1000k",
+            vs: "854x480",
+            vf: "24",
+          },
+          {
+            ab: "96k",
+            vb: "600k",
+            vs: "640x360",
+            vf: "20",
+          },
+        ]
+      },
+    ]
+  }
 };
 
 let url = process.env.BACKEND_URL + "/stream";
@@ -290,54 +290,6 @@ nms.on('prePublish', async (id, StreamPath, args) => {
     }
   }
 
-  session.reject();
-});
-
-
-
-nms.on('prePublish', async (id, StreamPath, args) => {
-  let date_pc = new Date();
-  date_pc.setHours(date_pc.getHours() - 3);
-
-  const key = StreamPath.replace(/\//g, '');
-
-  let totalKey;
-
-  if (key.length === 49) {
-    totalKey = key.substring(4, key.length);
-  } else {
-    totalKey = key;
-  }
-  const user = await getUserByKey(key);
-
-  const session = nms.getSession(id);
-
-  if (!user) {
-    console.log('[Pinkker] Usuario no encontrado');
-  } else if (args.token == user.cmt) {
-    console.log('[Pinkker] Token inválido para llave');
-  } else {
-    const streamingsOnline = await getStreamingsOnline();
-
-    if (!user.verified && streamingsOnline.data >= 20) {
-      console.log('[Pinkker] Maximo de streamings online para usuario no verificado');
-    } else if (user.verified && streamingsOnline.data >= 50) {
-      console.log('[Pinkker] Maximo de streamings online para usuario verificado');
-    } else {
-      streams.set(user.NameUser, totalKey);
-      keys.set(totalKey, user.NameUser);
-
-      let date = new Date().getTime();
-      await updateOnline(user.keyTransmission, true);
-      await updateTimeStart(user.keyTransmission, date);
-      const rtmpUrl = `rtmp://localhost:1935/live/${totalKey}`;
-      console.log(rtmpUrl);
-      await helpers.generateStreamThumbnail(totalKey, user.cmt);
-      console.log('[Pinkker] [PrePublish] Inicio del Stream para ' + user.NameUser + 'con la clave ' + totalKey);
-
-      return;
-    }
-  }
   session.reject();
 });
 

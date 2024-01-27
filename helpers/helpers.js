@@ -41,7 +41,8 @@ async function createVod(url, stream_key) {
 
 const generateStreamThumbnail = async (stream_key, cmt) => {
     setTimeout(async () => {
-        const thumbnailPath = process.env.LIVE_FOLDER + stream_key + '.png';
+        const thumbnailFilename = stream_key + '.png';
+        const thumbnailPath = path.join(__dirname, thumbnailFilename);
 
         const args = [
             '-y',
@@ -58,27 +59,30 @@ const generateStreamThumbnail = async (stream_key, cmt) => {
                 detached: true,
                 stdio: 'ignore'
             }).unref();
+            setTimeout(async () => {
 
-            setTimeout(() => {
-                cloudinary.v2.uploader.upload(thumbnailPath, {
-                    folder: 'min', crop: "fill"
-                }, async (err, result) => {
-                    if (err) {
-                        console.error('Error uploading to Cloudinary:', err.message);
-                    } else {
+                console.log('Thumbnail generated successfully:', thumbnailPath);
 
-                        await updateThumbnail(result.secure_url, cmt);
-                        setTimeout(() => {
-                            removeTmp(thumbnailPath);
-                        }, 5000);
+                result = await cloudinary.uploader.upload(thumbnailPath)
+                console.log(result);
+                if (result && result?.url) {
+                    const res = await updateThumbnail(result?.url, cmt);
+                    console.log(res);
+                    console.log(result?.url);
+                    try {
+                        fs.unlinkSync(thumbnailPath);
+                        // fs.unlinkSync("deleteeee");
+                    } catch (unlinkError) {
+                        console.error('Error deleting file:', unlinkError.message);
                     }
-                });
-            }, 10000);
+                }
+            }, 10000)
         } catch (error) {
-            console.error('Error generating thumbnail:', error.message);
+            console.error('Error generating thumbnail:', error);
         }
-    }, 15000);
+    }, 30000);
 };
+
 
 const uploadStream = async (file_name, stream_key) => {
     const filePath = process.env.MEDIA_FOLDER + stream_key + "/" + file_name;
