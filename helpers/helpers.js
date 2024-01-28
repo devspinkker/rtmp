@@ -64,14 +64,10 @@ const generateStreamThumbnail = async (stream_key, cmt) => {
                 console.log('Thumbnail generated successfully:', thumbnailPath);
 
                 result = await cloudinary.uploader.upload(thumbnailPath)
-                console.log(result);
                 if (result && result?.url) {
                     const res = await updateThumbnail(result?.url, cmt);
-                    console.log(res);
-                    console.log(result?.url);
                     try {
                         fs.unlinkSync(thumbnailPath);
-                        // fs.unlinkSync("deleteeee");
                     } catch (unlinkError) {
                         console.error('Error deleting file:', unlinkError.message);
                     }

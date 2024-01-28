@@ -58,7 +58,7 @@ const config = {
     ffmpeg: process.env.FFMPEG_PATH,
     tasks: [
       {
-        rule: "live/*",
+        rule: "live/720p/*",
         model: [
           {
             ab: "128k",
@@ -66,19 +66,29 @@ const config = {
             vs: "1280x720",
             vf: "30",
           },
+        ],
+      },
+      {
+        rule: "live/480p/*",
+        model: [
           {
             ab: "96k",
             vb: "1000k",
             vs: "854x480",
             vf: "24",
           },
+        ],
+      },
+      {
+        rule: "live/360p/*",
+        model: [
           {
             ab: "96k",
             vb: "600k",
             vs: "640x360",
             vf: "20",
           },
-        ]
+        ],
       },
     ]
   }
@@ -166,6 +176,7 @@ function convertToMP4(chunks, totalKeyreq) {
         .toFormat('mp4')
         .outputOptions(['-movflags', 'frag_keyframe+empty_moov'])
         .outputOptions(['-bsf:a', 'aac_adtstoasc'])
+        .outputOptions(['-t', '30'])
         .output(outputFilePath)
         .on('end', () => {
           resolve(outputFilePath);
@@ -198,6 +209,7 @@ app.get('/getBuffer/:totalKey', async (req, res) => {
       });
 
       fileStream.pipe(res);
+      return
     } else {
       return res.status(404).send('El streamer está offline o no hay búfer disponible.');
     }
@@ -314,7 +326,17 @@ nms.on('donePublish', async (id, StreamPath, args) => {
       keys.delete(totalKey);
 
       await updateOnline(user.keyTransmission, false);
+
       console.log('[Pinkker] [donePublish] Stream apagado para ' + streamerName + ' con la clave ' + totalKey);
+      const clipsDir = path.join(__dirname, 'media', 'clips');
+      const mp4FilePath = path.join(clipsDir, `salida_${totalKey}.mp4`);
+      if (fs.existsSync(mp4FilePath)) {
+        try {
+          fs.unlinkSync(mp4FilePath);
+        } catch (unlinkError) {
+          console.error('[Pinkker] [donePublish] Error al eliminar el archivo MP4:', unlinkError.message);
+        }
+      }
     }
   }
 });
