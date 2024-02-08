@@ -43,22 +43,38 @@ const config = {
         app: 'live',
         ac: 'aac',
         vc: 'libx264',
-        vcParams: [
-          '-vf',
-          'scale=1280:720'
-        ],
+        vcParams: ['-vf', 'scale=1280:720'],
         hls: true,
         hlsFlags: '[hls_time=1:hls_list_size=15:hls_flags=delete_segments]',
         dash: false,
-      }
+      },
+      {
+        app: 'live',
+        ac: 'aac',
+        vc: 'libx264',
+        vcParams: ['-vf', 'scale=854:480'],
+        hls: true,
+        hlsFlags: '[hls_time=1:hls_list_size=15:hls_flags=delete_segments]',
+        dash: false,
+      },
+      {
+        app: 'live',
+        ac: 'aac',
+        vc: 'libx264',
+        vcParams: ['-vf', 'scale=640:360'],
+        hls: true,
+        hlsFlags: '[hls_time=1:hls_list_size=15:hls_flags=delete_segments]',
+        dash: false,
+      },
     ]
-  },
+  }
+  ,
 
   fission: {
     ffmpeg: process.env.FFMPEG_PATH,
     tasks: [
       {
-        rule: "live/720p/*",
+        rule: "live/*",
         model: [
           {
             ab: "128k",
@@ -66,29 +82,19 @@ const config = {
             vs: "1280x720",
             vf: "30",
           },
-        ],
-      },
-      {
-        rule: "live/480p/*",
-        model: [
           {
             ab: "96k",
             vb: "1000k",
             vs: "854x480",
             vf: "24",
           },
-        ],
-      },
-      {
-        rule: "live/360p/*",
-        model: [
           {
             ab: "96k",
             vb: "600k",
             vs: "640x360",
             vf: "20",
           },
-        ],
+        ]
       },
     ]
   }
@@ -176,7 +182,7 @@ function convertToMP4(chunks, totalKeyreq) {
         .toFormat('mp4')
         .outputOptions(['-movflags', 'frag_keyframe+empty_moov'])
         .outputOptions(['-bsf:a', 'aac_adtstoasc'])
-        .outputOptions(['-t', '30'])
+        .outputOptions(['-t', '70'])
         .output(outputFilePath)
         .on('end', () => {
           resolve(outputFilePath);
@@ -281,6 +287,12 @@ nms.on('prePublish', async (id, StreamPath, args) => {
   } else if (args.token == user.cmt) {
     console.log("[Pinkker] Token inválido para llave");
   } else {
+    // Crear la carpeta para almacenar chunks si no existe
+    const mediaFolder = path.join(__dirname, 'media', 'live', totalKey);
+    if (!fs.existsSync(mediaFolder)) {
+      fs.mkdirSync(mediaFolder, { recursive: true });
+    }
+
     const streamingsOnline = await getStreamingsOnline();
 
     if (!user.verified && streamingsOnline.data >= 20) {
@@ -317,7 +329,6 @@ nms.on('donePublish', async (id, StreamPath, args) => {
   }
 
   const user = await getUserByKey(key);
-
   if (user) {
     const streamerName = keys.get(totalKey);
 
