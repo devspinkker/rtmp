@@ -21,7 +21,7 @@ app.use(cors());
 const config = {
   rtmp: {
     port: 1935,
-    chunk_size: 4000,
+    chunk_size: 1024,
     gop_cache: true,
     ping: 60,
     ping_timeout: 30
@@ -40,74 +40,55 @@ const config = {
     ffmpeg: process.env.FFMPEG_PATH,
     tasks: [
       {
-        app: 'live',
-        ac: 'aac',
-        vc: 'libx264',
-        vcParams: ['-vf', 'scale=1280:720'],
+        app: "live",
         hls: true,
-        hlsFlags: '[hls_time=1:hls_list_size=15:hls_flags=delete_segments]',
-        dash: false,
+        hlsFlags: "[hls_time=1:hls_list_size=60:hls_flags=delete_segments]",
+        hlsKeep: false,
       },
-      {
-        app: 'live',
-        ac: 'aac',
-        vc: 'libx264',
-        vcParams: ['-vf', 'scale=854:480'],
-        hls: true,
-        hlsFlags: '[hls_time=1:hls_list_size=15:hls_flags=delete_segments]',
-        dash: false,
-      },
-      {
-        app: 'live',
-        ac: 'aac',
-        vc: 'libx264',
-        vcParams: ['-vf', 'scale=640:360'],
-        hls: true,
-        hlsFlags: '[hls_time=1:hls_list_size=15:hls_flags=delete_segments]',
-        dash: false,
-      },
-    ]
+    ],
+    MediaRoot: "./media",
   }
   ,
 
-  fission: {
-    ffmpeg: process.env.FFMPEG_PATH,
-    tasks: [
-      {
-        rule: "live/*",
-        model: [
-          {
-            ab: "128k",
-            vb: "1500k",
-            vs: "1280x720",
-            vf: "30",
-          },
-          {
-            ab: "96k",
-            vb: "1000k",
-            vs: "854x480",
-            vf: "24",
-          },
-          {
-            ab: "96k",
-            vb: "600k",
-            vs: "640x360",
-            vf: "20",
-          },
-        ]
-      },
-    ]
-  }
+  // fission: {
+  //   ffmpeg: process.env.FFMPEG_PATH,
+  //   tasks: [
+  //     {
+  //       rule: "live/*",
+  //       model: [
+  //         {
+  //           ab: "128k",
+  //           vb: "1500k",
+  //           vs: "1280x720",
+  //           vf: "30",
+  //         },
+  //         {
+  //           ab: "96k",
+  //           vb: "1000k",
+  //           vs: "854x480",
+  //           vf: "24",
+  //         },
+  //         {
+  //           ab: "96k",
+  //           vb: "600k",
+  //           vs: "640x360",
+  //           vf: "20",
+  //         },
+  //       ]
+  //     },
+  //   ]
+  // }
 };
 
 let url = process.env.BACKEND_URL + "/stream";
 
 async function updateOnline(Key, online) {
+
   try {
     const res = await axios.post(`${url}/update_online`, { Key, State: online });
     return res;
   } catch (error) {
-    console.log('Error en updateOnline:', error.message);
+    console.log('Error en updateOnline:', error);
     throw new Error('Error en updateOnline');
   }
 }
@@ -266,6 +247,7 @@ nms.on('doneConnect', (id, args) => {
 });
 
 nms.on('prePublish', async (id, StreamPath, args) => {
+  console.log('Configuración de HLS en prePublish:', config.trans.tasks[0].hlsFlags);
   let date_pc = new Date();
   date_pc.setHours(date_pc.getHours() - 3);
 
@@ -318,6 +300,7 @@ nms.on('prePublish', async (id, StreamPath, args) => {
 });
 
 nms.on('donePublish', async (id, StreamPath, args) => {
+  console.log('Configuración de HLS en donePublish:', config.trans.tasks[0].hlsFlags);
   const key = StreamPath.replace(/\//g, '');
 
   let totalKey;
