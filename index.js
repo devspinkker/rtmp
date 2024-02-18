@@ -42,7 +42,7 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=60:hls_flags=delete_segments]",
+        hlsFlags: "[hls_time=1:hls_list_size=30:hls_flags=delete_segments]",
         hlsKeep: false,
       },
     ],
