@@ -132,7 +132,6 @@ async function getStreamingsOnline() {
 }
 
 const { PassThrough } = require('stream');
-const { log } = require('console');
 
 function convertToMP4(chunks, totalKeyreq) {
   return new Promise((resolve, reject) => {
@@ -158,12 +157,13 @@ function convertToMP4(chunks, totalKeyreq) {
       ffmpegProcess
         .input(inputStream)
         .inputFormat('mpegts')
-        .videoCodec('copy')
-        .audioCodec('copy')
+        .videoCodec('libx264')
+        .audioCodec('aac')
         .toFormat('mp4')
         .outputOptions(['-movflags', 'frag_keyframe+empty_moov'])
         .outputOptions(['-bsf:a', 'aac_adtstoasc'])
-        .outputOptions(['-t', '70'])
+        .outputOptions(['-t', '20'])
+        .outputOptions(['-preset', 'ultrafast'])
         .output(outputFilePath)
         .on('end', () => {
           resolve(outputFilePath);
@@ -178,19 +178,18 @@ function convertToMP4(chunks, totalKeyreq) {
   });
 }
 
-app.get('/getBuffer/:totalKey', async (req, res) => {
-  const totalKeyreq = req.params.totalKey;
+app.get('/stream/:streamKey', async (req, res) => {
+  const streamKeyreq = req.params.streamKey;
   const currentFolder = process.cwd();
-  const mediaFolder = path.join(currentFolder, 'media', 'live', totalKeyreq);
+  const mediaFolder = path.join(currentFolder, 'media', 'live', streamKeyreq);
 
   try {
     const chunks = await getChunksFromFolder(mediaFolder);
 
     if (chunks !== null && chunks.length > 0) {
-      const mp4Buffer = await convertToMP4(chunks, totalKeyreq);
+      const mp4Buffer = await convertToMP4(chunks, streamKeyreq);
 
       const fileStream = fs.createReadStream(mp4Buffer);
-
       fileStream.on('error', (error) => {
         return res.status(500).send('Error interno al procesar la solicitud.');
       });
@@ -203,6 +202,7 @@ app.get('/getBuffer/:totalKey', async (req, res) => {
   } catch (error) {
     return res.status(500).send('Error interno al procesar la solicitud.');
   }
+
 });
 
 function getChunksFromFolder(folderPath) {

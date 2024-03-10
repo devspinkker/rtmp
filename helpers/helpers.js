@@ -46,7 +46,7 @@ const generateStreamThumbnail = async (stream_key, cmt) => {
 
         const args = [
             '-y',
-            '-i', process.env.LIVE_URL + '/live/' + stream_key + '/index.m3u8',
+            '-i', process.env.LIVE_URL + '/live/' + stream_key + '.flv',
             '-ss', '00:00:05',
             '-s', '1920x1080',
             '-vframes', '1',
@@ -61,16 +61,20 @@ const generateStreamThumbnail = async (stream_key, cmt) => {
             }).unref();
             setTimeout(async () => {
 
-                console.log('Thumbnail generated successfully:', thumbnailPath);
 
-                result = await cloudinary.uploader.upload(thumbnailPath)
-                if (result && result?.url) {
-                    const res = await updateThumbnail(result?.url, cmt);
-                    try {
-                        fs.unlinkSync(thumbnailPath);
-                    } catch (unlinkError) {
-                        console.error('Error deleting file:', unlinkError.message);
+                let result;
+                try {
+                    result = await cloudinary.uploader.upload(thumbnailPath);
+                    if (result && result.url) {
+                        await updateThumbnail(result.url, cmt);
+                        try {
+                            fs.unlinkSync(thumbnailPath);
+                        } catch (unlinkError) {
+                            console.error('Error deleting file:', unlinkError.message);
+                        }
                     }
+                } catch (cloudinaryError) {
+                    console.error('Error uploading to Cloudinary:', cloudinaryError);
                 }
             }, 10000)
         } catch (error) {
