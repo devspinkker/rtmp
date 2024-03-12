@@ -43,9 +43,13 @@ const config = {
         app: "live",
         hls: true,
         hlsFlags: "[hls_time=1:hls_list_size=30:hls_flags=delete_segments]",
-        hlsKeep: false,
+        hlsKeep: true,
+        vc: "libx264",
+        h264_profile: "main",
+        h264_level: "4.1",
       },
     ],
+
     MediaRoot: "./media",
   }
   ,
@@ -163,20 +167,23 @@ function convertToMP4(chunks, totalKeyreq) {
         .outputOptions(['-movflags', 'frag_keyframe+empty_moov'])
         .outputOptions(['-bsf:a', 'aac_adtstoasc'])
         .outputOptions(['-t', '20'])
-        .outputOptions(['-preset', 'ultrafast'])
+        .outputOptions(['-preset', 'fast'])
         .output(outputFilePath)
         .on('end', () => {
           resolve(outputFilePath);
         })
         .on('error', (err, stdout, stderr) => {
-          next(stderr);
+          reject(stderr);
         })
         .run();
+
+
     } catch (error) {
-      next(error);
+      reject(error); // Cambiado de next(error) a reject(error)
     }
   });
 }
+
 
 app.get('/stream/:streamKey', async (req, res) => {
   const streamKeyreq = req.params.streamKey;
