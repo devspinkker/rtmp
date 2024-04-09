@@ -271,90 +271,87 @@ function getChunksFromFolder(folderPath) {
 
 var nms = new NodeMediaServer(config);
 
-nms.on('preConnect', (id, args) => {
-  console.log('[Pinkker] [NodeEvent on preConnect]', `id=${id} args=${JSON.stringify(args)}`);
 
-});
 
 nms.on('doneConnect', (id, args) => {
   console.log('doneConnect');
 });
 
 nms.on('prePublish', async (id, StreamPath, args) => {
-  console.log('Configuración de HLS en prePublish:', config.trans.tasks[0].hlsFlags);
   let date_pc = new Date();
   date_pc.setHours(date_pc.getHours() - 3);
 
-  const key = StreamPath.replace(/\//g, "");
+  const parts = StreamPath.split("/");
+  const key = parts[parts.length - 1];
 
-  let totalKey;
-
-  if (key.length === 49) {
-    totalKey = key.substring(4, key.length);
-  } else {
-    totalKey = key;
-  }
   const user = await getUserByCmt(key);
+
+
+  if (!user?.keyTransmission) {
+    console.log("[Pinkker] Usuario no encontrado");
+    const session = nms.getSession(id);
+    session.reject();
+    return;
+  }
+
+  const nuevoStreamPath = `emily`; // Cambio realizado aquí
 
   const session = nms.getSession(id);
 
-  if (!user) {
-    console.log("[Pinkker] Usuario no encontrado");
+  if (!session || typeof session.accept !== 'function') {
+    console.error("La sesión no es válida o no tiene la función accept()");
+    return;
+  }
+
+  // Ahora debería ser seguro llamar a session.accept()
+  session.accept(nuevoStreamPath);;
+
+
+  const mediaFolder = path.join(__dirname, 'media', 'live', user.keyTransmission);
+  if (!fs.existsSync(mediaFolder)) {
+    fs.mkdirSync(mediaFolder, { recursive: true });
+  }
+
+  const streamingsOnline = await getStreamingsOnline();
+
+  if (!user.verified && streamingsOnline.data >= 20) {
+    console.log("[Pinkker] Máximo de streamings online para usuario no verificado");
+  } else if (user.verified && streamingsOnline.data >= 50) {
+    console.log("[Pinkker] Máximo de streamings online para usuario verificado");
   } else {
-    const mediaFolder = path.join(__dirname, 'media', 'live', totalKey);
-    if (!fs.existsSync(mediaFolder)) {
-      fs.mkdirSync(mediaFolder, { recursive: true });
-    }
+    streams.set(user.NameUser, user.keyTransmission);
+    keys.set(user.keyTransmission, user.NameUser);
 
-    const streamingsOnline = await getStreamingsOnline();
-
-    if (!user.verified && streamingsOnline.data >= 20) {
-      console.log("[Pinkker] Maximo de streamings online para usuario no verificado");
-    } else if (user.verified && streamingsOnline.data >= 50) {
-      console.log("[Pinkker] Maximo de streamings online para usuario verificado");
-    } else {
-      streams.set(user.NameUser, user.keyTransmission);
-      keys.set(user.keyTransmission, user.NameUser);
-
-      let date = new Date().getTime();
-      await updateOnline(user.keyTransmission, true);
-      await updateTimeStart(user.keyTransmission, date);
-      const rtmpUrl = `rtmp://localhost:1935/live/${totalKey}`;
-      console.log(rtmpUrl);
-      await helpers.generateStreamThumbnail(totalKey, user.cmt);
-      console.log('[Pinkker] [PrePublish] Inicio del Stream para ' + user.NameUser + "con la clave " + totalKey);
-      return;
-    }
+    let date = new Date().getTime();
+    await updateOnline(user.keyTransmission, true);
+    await updateTimeStart(user.keyTransmission, date);
+    const rtmpUrl = `rtmp://localhost:1935/live/${user.keyTransmission}`;
+    console.log(rtmpUrl);
+    await helpers.generateStreamThumbnail(user.keyTransmission, user.cmt);
+    console.log('[Pinkker] [PrePublish] Inicio del Stream para ' + user.NameUser + " con la clave " + user.keyTransmission);
+    return;
   }
 
   session.reject();
 });
 
+
 nms.on('donePublish', async (id, StreamPath, args) => {
-  console.log('Configuración de HLS en donePublish:', config.trans.tasks[0].hlsFlags);
-  const key = StreamPath.replace(/\//g, '');
-
-  let totalKey;
-
-  if (key.length === 49) {
-    totalKey = key.substring(4, key.length);
-  } else {
-    totalKey = key;
-  }
+  const parts = StreamPath.split("/");
+  const key = parts[parts.length - 1];
 
   const user = await getUserByCmt(key);
   if (user) {
-    const streamerName = keys.get(totalKey);
+    const streamerName = keys.get(user.keyTransmission);
 
     if (streamerName) {
       streams.delete(streamerName);
-      keys.delete(totalKey);
+      keys.delete(user.keyTransmission);
 
       await updateOnline(user.keyTransmission, false);
 
-      console.log('[Pinkker] [donePublish] Stream apagado para ' + streamerName + ' con la clave ' + totalKey);
       const clipsDir = path.join(__dirname, 'media', 'clips');
-      const mp4FilePath = path.join(clipsDir, `salida_${totalKey}.mp4`);
+      const mp4FilePath = path.join(clipsDir, `salida_${user.keyTransmission}.mp4`);
       if (fs.existsSync(mp4FilePath)) {
         try {
           fs.unlinkSync(mp4FilePath);
