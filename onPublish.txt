@@ -1,0 +1,59 @@
+se dede combiar la funcion OnnPublish y hacerla asyn
+
+
+node_modules\node-media-server\src\node_rtmp_session.js
+const { getUserByCmt } = require('../../../controllers/userCtrl');
+
+async onPublish(invokeMessage) {
+    if (typeof invokeMessage.streamName !== 'string') {
+      return;
+    }
+    const parts = invokeMessage.streamName.split('?')[0].split("/");
+    const key = parts[parts.length - 1];
+
+    const user = await getUserByCmt(key);
+    if (!user?.keyTransmission) {
+      console.log("[Pinkker] Usuario no encontrado");
+      return;
+    }
+
+    this.publishStreamPath = '/' + this.appname + '/' + user.keyTransmission.slice(4);
+    this.publishArgs = QueryString.parse(invokeMessage.streamName.split('?')[1]);
+    this.publishStreamId = this.parserPacket.header.stream_id;
+    context.nodeEvent.emit('prePublish', this.id, this.publishStreamPath, this.publishArgs);
+    if (!this.isStarting) {
+      return;
+    }
+
+    if (this.config.auth && this.config.auth.publish && !this.isLocal) {
+      let results = NodeCoreUtils.verifyAuth(this.publishArgs.sign, this.publishStreamPath, this.config.auth.secret);
+      if (!results) {
+        Logger.log(`[rtmp publish] Unauthorized. id=${this.id} streamPath=${this.publishStreamPath} streamId=${this.publishStreamId} sign=${this.publishArgs.sign} `);
+        this.sendStatusMessage(this.publishStreamId, 'error', 'NetStream.publish.Unauthorized', 'Authorization required.');
+        return;
+      }
+    }
+
+    if (context.publishers.has(this.publishStreamPath)) {
+      this.reject();
+      Logger.log(`[rtmp publish] Already has a stream. id=${this.id} streamPath=${this.publishStreamPath} streamId=${this.publishStreamId}`);
+      this.sendStatusMessage(this.publishStreamId, 'error', 'NetStream.Publish.BadName', 'Stream already publishing');
+    } else if (this.isPublishing) {
+      Logger.log(`[rtmp publish] NetConnection is publishing. id=${this.id} streamPath=${this.publishStreamPath} streamId=${this.publishStreamId}`);
+      this.sendStatusMessage(this.publishStreamId, 'error', 'NetStream.Publish.BadConnection', 'Connection already publishing');
+    } else {
+      Logger.log(`[rtmp publish] New stream. id=${this.id} streamPath=${this.publishStreamPath} streamId=${this.publishStreamId}`);
+      context.publishers.set(this.publishStreamPath, this.id);
+      this.isPublishing = true;
+
+      this.sendStatusMessage(this.publishStreamId, 'status', 'NetStream.Publish.Start', `${this.publishStreamPath} is now published.`);
+      for (let idlePlayerId of context.idlePlayers) {
+        let idlePlayer = context.sessions.get(idlePlayerId);
+        if (idlePlayer && idlePlayer.playStreamPath === this.publishStreamPath) {
+          idlePlayer.onStartPlay();
+          context.idlePlayers.delete(idlePlayerId);
+        }
+      }
+      context.nodeEvent.emit('postPublish', this.id, this.publishStreamPath, this.publishArgs);
+    }
+  }
