@@ -114,7 +114,7 @@ const config = {
 let url = process.env.BACKEND_URL + "/stream";
 
 async function updateOnline(Key, online) {
-
+  console.log(Key, online);
   try {
     const res = await axios.post(`${url}/update_online`, { Key, State: online });
     return res;
@@ -272,42 +272,36 @@ function getChunksFromFolder(folderPath) {
 var nms = new NodeMediaServer(config);
 
 
+nms.on('preConnect', (id, args) => {
+  console.log('[Pinkker] [NodeEvent on preConnect]', `id=${id} args=${JSON.stringify(args)}`);
 
+});
 nms.on('doneConnect', (id, args) => {
   console.log('doneConnect');
 });
 
 nms.on('prePublish', async (id, StreamPath, args) => {
+  const session = nms.getSession(id);
   let date_pc = new Date();
   date_pc.setHours(date_pc.getHours() - 3);
 
-  const parts = StreamPath.split("/");
-  const key = parts[parts.length - 1];
+  const key = StreamPath.replace(/\//g, "");
 
-  const user = await getUserByCmt(key);
+  const user = await getUserByKey(key);
 
+  let totalKey;
 
+  if (key.length === 49) {
+    totalKey = key.substring(4, key.length);
+  } else {
+    totalKey = key;
+  }
   if (!user?.keyTransmission) {
     console.log("[Pinkker] Usuario no encontrado");
-    const session = nms.getSession(id);
-    session.reject();
     return;
   }
 
-  const nuevoStreamPath = `emily`; // Cambio realizado aquí
-
-  const session = nms.getSession(id);
-
-  if (!session || typeof session.accept !== 'function') {
-    console.error("La sesión no es válida o no tiene la función accept()");
-    return;
-  }
-
-  // Ahora debería ser seguro llamar a session.accept()
-  session.accept(nuevoStreamPath);;
-
-
-  const mediaFolder = path.join(__dirname, 'media', 'live', user.keyTransmission);
+  const mediaFolder = path.join(__dirname, 'media', 'live', totalKey);
   if (!fs.existsSync(mediaFolder)) {
     fs.mkdirSync(mediaFolder, { recursive: true });
   }
@@ -319,8 +313,8 @@ nms.on('prePublish', async (id, StreamPath, args) => {
   } else if (user.verified && streamingsOnline.data >= 50) {
     console.log("[Pinkker] Máximo de streamings online para usuario verificado");
   } else {
-    streams.set(user.NameUser, user.keyTransmission);
-    keys.set(user.keyTransmission, user.NameUser);
+    streams.set(user.NameUser, totalKey);
+    keys.set(totalKey, user.NameUser);
 
     let date = new Date().getTime();
     await updateOnline(user.keyTransmission, true);
@@ -337,21 +331,27 @@ nms.on('prePublish', async (id, StreamPath, args) => {
 
 
 nms.on('donePublish', async (id, StreamPath, args) => {
-  const parts = StreamPath.split("/");
-  const key = parts[parts.length - 1];
+  const key = StreamPath.replace(/\//g, '');
 
-  const user = await getUserByCmt(key);
+  let totalKey;
+
+  if (key.length === 49) {
+    totalKey = key.substring(4, key.length);
+  } else {
+    totalKey = key;
+  }
+  const user = await getUserByKey(key);
   if (user) {
-    const streamerName = keys.get(user.keyTransmission);
-
+    const streamerName = keys.get(totalKey);
     if (streamerName) {
       streams.delete(streamerName);
-      keys.delete(user.keyTransmission);
+      keys.delete(totalKey);
 
       await updateOnline(user.keyTransmission, false);
 
+      console.log('[Pinkker] [donePublish] Stream apagado para ' + streamerName + ' con la clave ' + totalKey);
       const clipsDir = path.join(__dirname, 'media', 'clips');
-      const mp4FilePath = path.join(clipsDir, `salida_${user.keyTransmission}.mp4`);
+      const mp4FilePath = path.join(clipsDir, `salida_${totalKey}.mp4`);
       if (fs.existsSync(mp4FilePath)) {
         try {
           fs.unlinkSync(mp4FilePath);
@@ -362,7 +362,6 @@ nms.on('donePublish', async (id, StreamPath, args) => {
     }
   }
 });
-
 function getNewestFile(files, path) {
   var out = [];
   var files = files.filter(function (file) {
