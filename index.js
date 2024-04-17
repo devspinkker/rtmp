@@ -77,37 +77,45 @@ const config = {
       },
     ],
     MediaRoot: "./media",
+  },
+  fission: {
+    ffmpeg: process.env.FFMPEG_PATH,
+    tasks: [
+      {
+        rule: "live/*",
+        model: [
+          {
+            vb: "1500k",
+            vs: "1280x720",
+            vf: "30",
+            hls: true,
+            hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
+            hlsKeep: false,
+            additionalFlags: "-threads 1"
+
+          },
+          {
+            vb: "1000k",
+            vs: "854x480",
+            vf: "24",
+            hls: true,
+            hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
+            hlsKeep: false,
+            additionalFlags: "-threads 1"
+          },
+          {
+            vb: "600k",
+            vs: "640x360",
+            vf: "20",
+            hls: true,
+            hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
+            hlsKeep: false,
+            additionalFlags: "-threads 1"
+          },
+        ]
+      },
+    ]
   }
-
-
-  // fission: {
-  //   ffmpeg: process.env.FFMPEG_PATH,
-  //   tasks: [
-  //     {
-  //       rule: "live/*",
-  //       model: [
-  //         {
-  //           ab: "128k",
-  //           vb: "1500k",
-  //           vs: "1280x720",
-  //           vf: "30",
-  //         },
-  //         {
-  //           ab: "96k",
-  //           vb: "1000k",
-  //           vs: "854x480",
-  //           vf: "24",
-  //         },
-  //         {
-  //           ab: "96k",
-  //           vb: "600k",
-  //           vs: "640x360",
-  //           vf: "20",
-  //         },
-  //       ]
-  //     },
-  //   ]
-  // }
 };
 
 

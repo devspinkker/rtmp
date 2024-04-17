@@ -1,4 +1,4 @@
-se dede combiar la funcion OnnPublish y hacerla asyn
+se dede combiar la funcion onPublish y hacerla async
 
 
 node_modules\node-media-server\src\node_rtmp_session.js
