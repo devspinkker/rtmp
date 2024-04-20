@@ -42,7 +42,7 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
+        hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
         hlsKeep: true,
         vc: "libx264",
         h264_profile: "main",
@@ -53,7 +53,7 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
+        hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
         hlsKeep: false,
         vc: "h264_nvenc",
         h264_profile: "main",
@@ -65,7 +65,7 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
+        hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
         hlsKeep: false,
         vc: "hevc_nvenc",
         hevc_profile: "main",
