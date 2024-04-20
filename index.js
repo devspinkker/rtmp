@@ -12,7 +12,6 @@ const streams = new Map();
 const keys = new Map();
 
 const { getUserByKey } = require("./controllers/userCtrl");
-const { getUserByCmt } = require("./controllers/userCtrl");
 
 var fs = require('fs');
 const spawn = require('child_process').spawn;
@@ -22,10 +21,10 @@ app.use(cors());
 const config = {
   rtmp: {
     port: 1935,
-    chunk_size: 1024,
+    chunk_size: 60000,
     gop_cache: true,
-    ping: 60,
-    ping_timeout: 30
+    ping: 30,
+    ping_timeout: 60
   },
   http: {
     port: 8000,
@@ -85,36 +84,26 @@ const config = {
         rule: "live/*",
         model: [
           {
+            ab: "128k",
             vb: "1500k",
             vs: "1280x720",
             vf: "30",
-            hls: true,
-            hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
-            hlsKeep: false,
-            additionalFlags: "-threads 1"
-
           },
           {
+            ab: "96k",
             vb: "1000k",
             vs: "854x480",
             vf: "24",
-            hls: true,
-            hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
-            hlsKeep: false,
-            additionalFlags: "-threads 1"
           },
           {
+            ab: "96k",
             vb: "600k",
             vs: "640x360",
             vf: "20",
-            hls: true,
-            hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
-            hlsKeep: false,
-            additionalFlags: "-threads 1"
           },
-        ]
+        ],
       },
-    ]
+    ],
   }
 };
 
