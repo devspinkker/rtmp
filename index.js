@@ -11,7 +11,7 @@ ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
 const streams = new Map();
 const keys = new Map();
 
-const { getUserByKey } = require("./controllers/userCtrl");
+const { getUserByKey, AverageViewers } = require("./controllers/userCtrl");
 
 var fs = require('fs');
 const spawn = require('child_process').spawn;
@@ -42,7 +42,7 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
+        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
         hlsKeep: true,
         vc: "libx264",
         h264_profile: "main",
@@ -53,7 +53,7 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
+        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
         hlsKeep: false,
         vc: "h264_nvenc",
         h264_profile: "main",
@@ -65,7 +65,7 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=16:hls_flags=delete_segments]",
+        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
         hlsKeep: false,
         vc: "hevc_nvenc",
         hevc_profile: "main",
@@ -320,11 +320,19 @@ nms.on('prePublish', async (id, StreamPath, args) => {
     console.log(rtmpUrl);
     await helpers.generateStreamThumbnail(user.keyTransmission, user.cmt);
     console.log('[Pinkker] [PrePublish] Inicio del Stream para ' + user.NameUser + " con la clave " + user.keyTransmission);
+
+    const interval = setInterval(async () => {
+      await AverageViewers(user.id);
+    }, 2000);
+    // 10 * 60 * 1000
+    session.user = { interval };
+
     return;
   }
 
   session.reject();
 });
+
 
 
 nms.on('donePublish', async (id, StreamPath, args) => {
@@ -357,8 +365,17 @@ nms.on('donePublish', async (id, StreamPath, args) => {
         }
       }
     }
+
+    if (id && nms.getSession(id) && nms.getSession(id).user && nms.getSession(id).user.interval) {
+      clearInterval(nms.getSession(id).user.interval);
+    }
   }
 });
+
+
+
+
+
 function getNewestFile(files, path) {
   var out = [];
   var files = files.filter(function (file) {
