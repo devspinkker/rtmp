@@ -39,11 +39,12 @@ async function createVod(url, stream_key) {
     }
 }
 
-const generateStreamThumbnail = async (stream_key, cmt) => {
+const generateStreamThumbnail = async (key, cmt) => {
     setTimeout(async () => {
+        const stream_key = key.substring(4, key.length);
+
         const thumbnailFilename = stream_key + '.png';
         const thumbnailPath = path.join(__dirname, thumbnailFilename);
-
         const args = [
             '-y',
             '-i', process.env.LIVE_URL + '/live/' + stream_key + '.flv',

@@ -277,7 +277,7 @@ nms.on('doneConnect', (id, args) => {
   console.log('doneConnect');
 });
 
-nms.on('prePublish', async (id, StreamPath, args) => {
+nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   const session = nms.getSession(id);
   let date_pc = new Date();
   date_pc.setHours(date_pc.getHours() - 3);
@@ -318,14 +318,15 @@ nms.on('prePublish', async (id, StreamPath, args) => {
     await updateTimeStart(user.keyTransmission, date);
     const rtmpUrl = `rtmp://localhost:1935/live/${user.keyTransmission}`;
     console.log(rtmpUrl);
-    await helpers.generateStreamThumbnail(user.keyTransmission, user.cmt);
     console.log('[Pinkker] [PrePublish] Inicio del Stream para ' + user.NameUser + " con la clave " + user.keyTransmission);
 
-    const interval = setInterval(async () => {
-      await AverageViewers(user.id);
-    }, 2000);
-    // 10 * 60 * 1000
-    session.user = { interval };
+    if (cmt) {
+      const interval = setInterval(async () => {
+        await helpers.generateStreamThumbnail(user.keyTransmission, cmt);
+        await AverageViewers(user.id);
+      }, 3 * 60 * 3000);
+      session.user = { interval };
+    }
 
     return;
   }

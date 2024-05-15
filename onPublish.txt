@@ -1,7 +1,7 @@
 se dede combiar la funcion onPublish y hacerla async
 
 
-node_modules\node-media-server\src\node_rtmp_session.js
+node_modules/node-media-server/src/node_rtmp_session.js
 const { getUserByCmt, getUserByKey } = require('../../../controllers/userCtrl');
 
   async onPublish(invokeMessage) {
@@ -11,7 +11,7 @@ const { getUserByCmt, getUserByKey } = require('../../../controllers/userCtrl');
     const parts = invokeMessage.streamName.split('?')[0].split("/");
     const key = parts[parts.length - 1];
     //Se comprueba si la clave que llega es para las resoluciones o es el hls del obs 
-    // si es obs no se conntendra el _ y luego la resolucion 
+    // si es obs no se contendra el _ y luego la resolucion 
     let cleanedKey = key;
     const underscoreIndex = key.indexOf('_');
     if (underscoreIndex !== -1) {
@@ -32,7 +32,8 @@ const { getUserByCmt, getUserByKey } = require('../../../controllers/userCtrl');
 
     this.publishArgs = QueryString.parse(invokeMessage.streamName.split('?')[1]);
     this.publishStreamId = this.parserPacket.header.stream_id;
-    context.nodeEvent.emit('prePublish', this.id, this.publishStreamPath, this.publishArgs);
+    // pasar clae cmt a el entto  prePublish
+    context.nodeEvent.emit('prePublish', this.id, this.publishStreamPath, this.publishArgs, user.cmt);
     if (!this.isStarting) {
       return;
     }
