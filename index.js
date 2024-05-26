@@ -21,7 +21,7 @@ app.use(cors());
 const config = {
   rtmp: {
     port: 1935,
-    chunk_size: 60000,
+    chunk_size: 2000,
     gop_cache: true,
     ping: 30,
     ping_timeout: 60
@@ -48,7 +48,7 @@ const config = {
         h264_profile: "main",
         h264_level: "4.1",
         hls_wait_keyframe: true, // Agregar esta línea para esperar fotograma clave en HLS
-        gop: 1, // Agregar esta línea para ajustar el GOP a 1 segundo
+        gop: 130, // Agregar esta línea para ajustar el GOP a 1 segundo
       },
       {
         app: "live",
@@ -60,7 +60,7 @@ const config = {
         h264_level: "4.1",
         gpu: 0,
         hls_wait_keyframe: true, // Agregar esta línea para esperar fotograma clave en HLS
-        gop: 1, // Agregar esta línea para ajustar el GOP a 1 segundo
+        gop: 130, // Agregar esta línea para ajustar el GOP a 1 segundo
       },
       {
         app: "live",
@@ -72,7 +72,7 @@ const config = {
         hevc_level: "4.1",
         gpu: 0,
         hls_wait_keyframe: true, // Agregar esta línea para esperar fotograma clave en HLS
-        gop: 1, // Agregar esta línea para ajustar el GOP a 1 segundo
+        gop: 130, // Agregar esta línea para ajustar el GOP a 1 segundo
       },
     ],
     MediaRoot: "./media",
@@ -190,8 +190,10 @@ function convertToMP4(chunks, totalKeyreq) {
         .toFormat('mp4')
         .outputOptions(['-movflags', 'frag_keyframe+empty_moov'])
         .outputOptions(['-bsf:a', 'aac_adtstoasc'])
-        .outputOptions(['-t', '20'])
-        .outputOptions(['-preset', 'fast'])
+        .outputOptions(['-t', '30'])
+        .outputOptions(['-preset', 'ultrafast'])
+        .outputOptions(['-crf', '28'])
+        .outputOptions(['-s', '1280x720'])
         .output(outputFilePath)
         .on('end', () => {
           resolve(outputFilePath);
@@ -200,6 +202,7 @@ function convertToMP4(chunks, totalKeyreq) {
           reject(stderr);
         })
         .run();
+
 
 
     } catch (error) {
@@ -319,13 +322,17 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
     const rtmpUrl = `rtmp://localhost:1935/live/${user.keyTransmission}`;
     console.log(rtmpUrl);
     console.log('[Pinkker] [PrePublish] Inicio del Stream para ' + user.NameUser + " con la clave " + user.keyTransmission);
-
     if (cmt) {
       const interval = setInterval(async () => {
-        await helpers.generateStreamThumbnail(user.keyTransmission, cmt);
         await AverageViewers(user.id);
-      }, 3 * 60 * 3000);
+      }, 3 * 60 * 1000);
       session.user = { interval };
+
+      const secondInterval = setInterval(async () => {
+        await helpers.generateStreamThumbnail(user.keyTransmission, cmt);
+      }, 5 * 60 * 1000);
+
+      session.user.secondInterval = secondInterval;
     }
 
     return;
