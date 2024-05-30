@@ -296,7 +296,7 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   } else {
     totalKey = key;
   }
-  if (!user?.keyTransmission) {
+  if (!user?.keyTransmission || user?.Banned) {
     console.log("[Pinkker] Usuario no encontrado");
     return;
   }
