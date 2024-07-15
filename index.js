@@ -490,19 +490,25 @@ app.get('/stream/:streamKey', async (req, res) => {
   }
 });
 
+
 app.get('/stream/vod/:streamKey', async (req, res) => {
   const storageDir = path.join(__dirname, 'media', 'storage', 'live');
   const streamKeyreq = req.params.streamKey;
   const vodFolder = path.join(storageDir, streamKeyreq);
 
+  console.log(`Verificando el VOD para el streamKey: ${streamKeyreq} en ${vodFolder}`);
   try {
     const m3u8Path = path.join(vodFolder, 'index.m3u8');
+    console.log(`Buscando archivo: ${m3u8Path}`);
 
     if (fs.existsSync(m3u8Path)) {
       res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
       const m3u8Stream = fs.createReadStream(m3u8Path);
       m3u8Stream.pipe(res);
+      console.log(`Archivo encontrado: ${m3u8Path}`);
+      console.log("Transmisión del archivo .m3u8 iniciada");
     } else {
+      console.log(`Archivo .m3u8 no encontrado en: ${m3u8Path}`);
       res.status(404).send('VOD no encontrado.');
     }
   } catch (error) {
@@ -515,15 +521,19 @@ app.get('/stream/vod/:streamKey/:tsFile', async (req, res) => {
   const storageDir = path.join(__dirname, 'media', 'storage', 'live');
   const streamKeyreq = req.params.streamKey;
   const tsFile = req.params.tsFile;
-  const vodFolder = path.join(storageDir, streamKeyreq);
-  const tsFilePath = path.join(vodFolder, tsFile);
+  const tsFilePath = path.join(storageDir, streamKeyreq, tsFile);
 
+  console.log(`Verificando el segmento para el streamKey: ${streamKeyreq} y archivo: ${tsFile}`);
+  console.log(`Buscando archivo: ${tsFilePath}`);
   try {
     if (fs.existsSync(tsFilePath)) {
       res.setHeader('Content-Type', 'video/MP2T');
       const tsStream = fs.createReadStream(tsFilePath);
       tsStream.pipe(res);
+      console.log(`Segmento encontrado: ${tsFilePath}`);
+      console.log(`Transmisión del segmento .ts ${tsFile} iniciada`);
     } else {
+      console.log(`Segmento no encontrado en: ${tsFilePath}`);
       res.status(404).send('Segmento no encontrado.');
     }
   } catch (error) {
@@ -531,7 +541,6 @@ app.get('/stream/vod/:streamKey/:tsFile', async (req, res) => {
     res.status(500).send('Error interno al procesar la solicitud.');
   }
 });
-
 
 nms.run();
 app.listen(8002, () => {
