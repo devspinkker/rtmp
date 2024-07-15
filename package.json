@@ -6,7 +6,6 @@
   "scripts": {
     "start": "node index.js"
   },
-  "author": "maariyadiminsky",
   "dependencies": {
     "axios": "^0.24.0",
     "circular-buffer": "^1.0.3",

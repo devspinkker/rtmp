@@ -8,8 +8,6 @@ const helpers = require('./helpers/helpers');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
-const streams = new Map();
-const keys = new Map();
 
 const { getUserByKey, AverageViewers } = require("./controllers/userCtrl");
 
@@ -42,37 +40,40 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
+        hlsFlags: "[hls_time=1:hls_list_size=10]",
         hlsKeep: true,
         vc: "libx264",
         h264_profile: "main",
         h264_level: "4.1",
-        hls_wait_keyframe: true, // Agregar esta línea para esperar fotograma clave en HLS
-        gop: 130, // Agregar esta línea para ajustar el GOP a 1 segundo
+        hls_wait_keyframe: true,
+        dashKeep: true,
+        gop: 130,
       },
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
-        hlsKeep: false,
+        hlsFlags: "[hls_time=1:hls_list_size=10]",
+        hlsKeep: true,
         vc: "h264_nvenc",
         h264_profile: "main",
         h264_level: "4.1",
         gpu: 0,
-        hls_wait_keyframe: true, // Agregar esta línea para esperar fotograma clave en HLS
-        gop: 130, // Agregar esta línea para ajustar el GOP a 1 segundo
+        hls_wait_keyframe: true,
+        gop: 130,
+        dashKeep: true,
       },
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
-        hlsKeep: false,
+        hlsFlags: "[hls_time=1:hls_list_size=10]",
+        hlsKeep: true,
         vc: "hevc_nvenc",
         hevc_profile: "main",
         hevc_level: "4.1",
         gpu: 0,
-        hls_wait_keyframe: true, // Agregar esta línea para esperar fotograma clave en HLS
-        gop: 130, // Agregar esta línea para ajustar el GOP a 1 segundo
+        hls_wait_keyframe: true,
+        gop: 130,
+        dashKeep: true,
       },
     ],
     MediaRoot: "./media",
@@ -106,6 +107,7 @@ const config = {
     ],
   }
 };
+
 
 
 let url = process.env.BACKEND_URL + "/stream";
@@ -161,113 +163,6 @@ async function getStreamingsOnline() {
 
 const { PassThrough } = require('stream');
 
-function convertToMP4(chunks, totalKeyreq) {
-  return new Promise((resolve, reject) => {
-    try {
-      const mediaDir = path.join(__dirname, 'media');
-      const clipsDir = path.join(mediaDir, 'clips');
-
-      if (!fs.existsSync(mediaDir)) {
-        fs.mkdirSync(mediaDir);
-      }
-
-      if (!fs.existsSync(clipsDir)) {
-        fs.mkdirSync(clipsDir);
-      }
-
-      const ffmpegProcess = ffmpeg();
-      const inputStream = new PassThrough();
-      chunks.forEach(chunk => inputStream.write(chunk));
-      inputStream.end();
-
-      const outputFilePath = path.join(clipsDir, `salida_${totalKeyreq}.mp4`);
-
-      ffmpegProcess
-        .input(inputStream)
-        .inputFormat('mpegts')
-        .videoCodec('libx264')
-        .audioCodec('aac')
-        .toFormat('mp4')
-        .outputOptions(['-movflags', 'frag_keyframe+empty_moov'])
-        .outputOptions(['-bsf:a', 'aac_adtstoasc'])
-        .outputOptions(['-t', '30'])
-        .outputOptions(['-preset', 'ultrafast'])
-        .outputOptions(['-crf', '28'])
-        .outputOptions(['-s', '1280x720'])
-        .output(outputFilePath)
-        .on('end', () => {
-          resolve(outputFilePath);
-        })
-        .on('error', (err, stdout, stderr) => {
-          reject(stderr);
-        })
-        .run();
-
-
-
-    } catch (error) {
-      reject(error);
-    }
-  });
-}
-
-
-app.get('/stream/:streamKey', async (req, res) => {
-  const streamKeyreq = req.params.streamKey;
-  const currentFolder = process.cwd();
-  const mediaFolder = path.join(currentFolder, 'media', 'live', streamKeyreq);
-
-  try {
-    const chunks = await getChunksFromFolder(mediaFolder);
-
-    if (chunks !== null && chunks.length > 0) {
-      const mp4Buffer = await convertToMP4(chunks, streamKeyreq);
-
-      const fileStream = fs.createReadStream(mp4Buffer);
-      fileStream.on('error', (error) => {
-        return res.status(500).send('Error interno al procesar la solicitud.');
-      });
-
-      fileStream.pipe(res);
-      return
-    } else {
-      return res.status(404).send('El streamer está offline o no hay búfer disponible.');
-    }
-  } catch (error) {
-    return res.status(500).send('Error interno al procesar la solicitud.');
-  }
-
-});
-
-function getChunksFromFolder(folderPath) {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const isFolderExists = await fs.promises.access(folderPath, fs.constants.F_OK)
-        .then(() => true)
-        .catch(() => false);
-
-      if (!isFolderExists) {
-        resolve(null);
-        return;
-      }
-
-      const files = await fs.promises.readdir(folderPath);
-      const tsFiles = files.filter(file => file.endsWith('.ts'));
-
-      const chunks = await Promise.all(tsFiles.map(async file => {
-        const filePath = path.join(folderPath, file);
-        return fs.promises.readFile(filePath);
-      }));
-
-      resolve(chunks);
-      return
-
-    } catch (error) {
-      reject(error);
-      return
-    }
-  });
-}
 
 var nms = new NodeMediaServer(config);
 
@@ -313,8 +208,6 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   } else if (user.verified && streamingsOnline.data >= 50) {
     console.log("[Pinkker] Máximo de streamings online para usuario verificado");
   } else {
-    streams.set(user.NameUser, totalKey);
-    keys.set(totalKey, user.NameUser);
 
     let date = new Date().getTime();
     await updateOnline(user.keyTransmission, true);
@@ -343,34 +236,84 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
 
 
 
-nms.on('donePublish', async (id, StreamPath, args) => {
-  const key = StreamPath.replace(/\//g, '');
-
+; nms.on('donePublish', async (id, StreamPath, args) => {
   let totalKey;
+
+  const key = StreamPath.replace(/\//g, '');
 
   if (key.length === 49) {
     totalKey = key.substring(4, key.length);
   } else {
     totalKey = key;
   }
+
+  if (totalKey.includes('_')) {
+    return;
+  }
+
+  const sourceDir = path.join(__dirname, 'media', 'live', totalKey);
+  const tempDir = path.join(__dirname, 'media', 'temp', totalKey);
+  const files = fs.existsSync(sourceDir) ? fs.readdirSync(sourceDir) : [];
+
+  console.log(`[Pinkker] [donePublish] Archivos en ${sourceDir}:`, files);
+
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+
+  files.forEach(file => {
+    const sourceFile = path.join(sourceDir, file);
+    const tempFile = path.join(tempDir, file);
+
+    if (fs.existsSync(sourceFile)) {
+      console.log(`[Debug] Moviendo archivo ${sourceFile} a ${tempFile}`);
+      try {
+        fs.renameSync(sourceFile, tempFile);
+        console.log(`[Pinkker] [donePublish] Archivo movido de ${sourceFile} a ${tempFile}`);
+      } catch (error) {
+        console.error(`[Pinkker] [donePublish] Error al mover archivo ${sourceFile} a ${tempFile}:`, error);
+      }
+    } else {
+      console.error(`[Pinkker] [donePublish] El archivo ${sourceFile} no existe.`);
+    }
+  });
+
   const user = await getUserByKey(key);
-  if (user) {
-    const streamerName = keys.get(totalKey);
-    if (streamerName) {
-      streams.delete(streamerName);
-      keys.delete(totalKey);
 
-      await updateOnline(user.keyTransmission, false);
+  if (user && user.keyTransmission) {
+    const res = await updateOnline(user.keyTransmission, false);
 
-      console.log('[Pinkker] [donePublish] Stream apagado para ' + streamerName + ' con la clave ' + totalKey);
-      const clipsDir = path.join(__dirname, 'media', 'clips');
-      const mp4FilePath = path.join(clipsDir, `salida_${totalKey}.mp4`);
-      if (fs.existsSync(mp4FilePath)) {
-        try {
-          fs.unlinkSync(mp4FilePath);
-        } catch (unlinkError) {
-          console.error('[Pinkker] [donePublish] Error al eliminar el archivo MP4:', unlinkError.message);
+    console.log(`[Pinkker] [donePublish] Stream apagado con la clave ${totalKey}`);
+    if (res.data.data) {
+      const destDir = path.join(__dirname, 'media', 'storage', 'live', res.data.data);
+
+      try {
+        if (!fs.existsSync(destDir)) {
+          fs.mkdirSync(destDir, { recursive: true });
         }
+
+        const tempFiles = fs.existsSync(tempDir) ? fs.readdirSync(tempDir) : [];
+
+        tempFiles.forEach(file => {
+          const tempFile = path.join(tempDir, file);
+          const destFile = path.join(destDir, file);
+
+          if (fs.existsSync(tempFile)) {
+            console.log(`[Debug] Moviendo archivo ${tempFile} a ${destFile}`);
+            try {
+              fs.renameSync(tempFile, destFile);
+              console.log(`[Pinkker] [donePublish] Archivo movido de ${tempFile} a ${destFile}`);
+            } catch (error) {
+              console.error(`[Pinkker] [donePublish] Error al mover archivo ${tempFile} a ${destFile}:`, error);
+            }
+          } else {
+            console.error(`[Pinkker] [donePublish] El archivo ${tempFile} no existe.`);
+          }
+        });
+
+        console.log(`[Pinkker] [donePublish] Transmisión movida a ${destDir} con la clave ${res.data.data}`);
+      } catch (error) {
+        console.error('[Pinkker] [donePublish] Error al mover transmisión:', error);
       }
     }
 
@@ -379,10 +322,6 @@ nms.on('donePublish', async (id, StreamPath, args) => {
     }
   }
 });
-
-
-
-
 
 function getNewestFile(files, path) {
   var out = [];
@@ -401,6 +340,198 @@ function getNewestFile(files, path) {
   })
   return (out.length > 0) ? out[0].file : "";
 }
+
+async function getChunksFromFolder(folderPath) {
+  try {
+    const isFolderExists = await fs.promises.access(folderPath, fs.constants.F_OK)
+      .then(() => true)
+      .catch(() => false);
+
+    if (!isFolderExists) {
+      console.log('La carpeta no existe:', folderPath);
+      return null;
+    }
+
+    const files = await fs.promises.readdir(folderPath);
+    const tsFiles = files.filter(file => file.endsWith('.ts'));
+
+    // Obtener los archivos .ts ordenados por fecha de modificación ascendente
+    const tsFilesWithStats = await Promise.all(tsFiles.map(async file => {
+      const filePath = path.join(folderPath, file);
+      const stats = await fs.promises.stat(filePath);
+      return { file, stats };
+    }));
+
+    tsFilesWithStats.sort((a, b) => a.stats.mtime.getTime() - b.stats.mtime.getTime());
+
+    const chunks = [];
+    let totalDuration = 0;
+    const selectedFiles = [];
+
+    for (let i = tsFilesWithStats.length - 1; i >= 0; i--) {
+      const tsFile = tsFilesWithStats[i];
+      const filePath = path.join(folderPath, tsFile.file);
+      const fileContent = await fs.promises.readFile(filePath);
+      chunks.push(fileContent);
+      selectedFiles.push(tsFile.file);
+
+      // Obtener la duración del archivo .ts en segundos
+      const durationInSeconds = await getVideoDurationInSeconds(filePath);
+
+      // Sumar la duración del archivo al total
+      totalDuration += durationInSeconds;
+
+      // Si alcanzamos aproximadamente 30 segundos o más, salir del bucle
+      if (totalDuration >= 30) {
+        break;
+      }
+    }
+
+    // Ordenar los chunks y archivos seleccionados en orden ascendente
+    selectedFiles.reverse();
+    chunks.reverse();
+
+    console.log('Archivos seleccionados:', selectedFiles);
+    return chunks;
+  } catch (error) {
+    console.error('Error al obtener chunks:', error);
+    throw error;
+  }
+}
+function convertToMP4(chunks, totalKeyreq) {
+  return new Promise((resolve, reject) => {
+    try {
+      const mediaDir = path.join(__dirname, 'media');
+      const clipsDir = path.join(mediaDir, 'clips');
+
+      if (!fs.existsSync(mediaDir)) {
+        fs.mkdirSync(mediaDir);
+      }
+
+      if (!fs.existsSync(clipsDir)) {
+        fs.mkdirSync(clipsDir);
+      }
+
+      const inputStream = new PassThrough();
+      chunks.forEach(chunk => inputStream.write(chunk));
+      inputStream.end();
+
+      const outputFilePath = path.join(clipsDir, `salida_${totalKeyreq}.mp4`);
+
+      const ffmpegProcess = ffmpeg();
+      ffmpegProcess
+        .input(inputStream)
+        .inputFormat('mpegts')
+        .videoCodec('libx264')
+        .audioCodec('aac')
+        .toFormat('mp4')
+        .outputOptions(['-movflags', 'frag_keyframe+empty_moov'])
+        .outputOptions(['-bsf:a', 'aac_adtstoasc'])
+        .outputOptions(['-preset', 'fast'])
+        .outputOptions(['-crf', '25'])
+        .outputOptions(['-maxrate', '2000k', '-bufsize', '4000k'])
+        .outputOptions(['-s', '1280x720'])
+        .output(outputFilePath)
+        .on('end', () => {
+          resolve(outputFilePath);
+        })
+        .on('error', (err, stdout, stderr) => {
+          reject(stderr);
+        })
+        .run();
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+async function getVideoDurationInSeconds(filePath) {
+  return new Promise((resolve, reject) => {
+    const ffprobeProcess = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath
+    ]);
+
+    ffprobeProcess.stdout.on('data', (data) => {
+      const duration = parseFloat(data.toString());
+      resolve(duration);
+    });
+
+    ffprobeProcess.stderr.on('data', (data) => {
+      reject(data.toString());
+    });
+  });
+}
+
+app.get('/stream/:streamKey', async (req, res) => {
+  const streamKeyreq = req.params.streamKey;
+  const currentFolder = process.cwd();
+  const mediaFolder = path.join(currentFolder, 'media', 'live', streamKeyreq);
+
+  try {
+    const chunks = await getChunksFromFolder(mediaFolder);
+
+    if (chunks !== null && chunks.length > 0) {
+      const mp4Buffer = await convertToMP4(chunks, streamKeyreq);
+
+      const fileStream = fs.createReadStream(mp4Buffer);
+      fileStream.on('error', (error) => {
+        return res.status(500).send('Error interno al procesar la solicitud.');
+      });
+
+      fileStream.pipe(res);
+    } else {
+      return res.status(404).send('El streamer está offline o no hay búfer disponible.');
+    }
+  } catch (error) {
+    console.error('Error en la solicitud /stream:', error);
+    return res.status(500).send('Error interno al procesar la solicitud.');
+  }
+});
+
+app.get('/stream/vod/:streamKey', async (req, res) => {
+  const storageDir = path.join(__dirname, 'media', 'storage', 'live');
+  const streamKeyreq = req.params.streamKey;
+  const vodFolder = path.join(storageDir, streamKeyreq);
+
+  try {
+    const m3u8Path = path.join(vodFolder, 'index.m3u8');
+
+    if (fs.existsSync(m3u8Path)) {
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+      const m3u8Stream = fs.createReadStream(m3u8Path);
+      m3u8Stream.pipe(res);
+    } else {
+      res.status(404).send('VOD no encontrado.');
+    }
+  } catch (error) {
+    console.error('Error al servir VOD:', error);
+    res.status(500).send('Error interno al procesar la solicitud.');
+  }
+});
+
+app.get('/stream/vod/:streamKey/:tsFile', async (req, res) => {
+  const storageDir = path.join(__dirname, 'media', 'storage', 'live');
+  const streamKeyreq = req.params.streamKey;
+  const tsFile = req.params.tsFile;
+  const vodFolder = path.join(storageDir, streamKeyreq);
+  const tsFilePath = path.join(vodFolder, tsFile);
+
+  try {
+    if (fs.existsSync(tsFilePath)) {
+      res.setHeader('Content-Type', 'video/MP2T');
+      const tsStream = fs.createReadStream(tsFilePath);
+      tsStream.pipe(res);
+    } else {
+      res.status(404).send('Segmento no encontrado.');
+    }
+  } catch (error) {
+    console.error('Error al servir segmento:', error);
+    res.status(500).send('Error interno al procesar la solicitud.');
+  }
+});
+
 
 nms.run();
 app.listen(8002, () => {
