@@ -499,7 +499,6 @@ app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
   const vodFolder = path.join(storageDir, streamKey);
 
   try {
-    // Obtener lista de archivos .ts en el directorio y ordenarlos
     const files = fs.readdirSync(vodFolder)
       .filter(file => file.endsWith('.ts'))
       .sort((a, b) => {
@@ -509,7 +508,6 @@ app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
       });
 
     if (files.length > 0) {
-      // Generar contenido del archivo .m3u8
       const m3u8Content = [
         '#EXTM3U',
         '#EXT-X-VERSION:3',
@@ -519,14 +517,13 @@ app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
       ];
 
       files.forEach(file => {
-        const duration = 10; // Duración estimada del segmento. Ajusta según tus necesidades
+        const duration = 10;
         m3u8Content.push(`#EXTINF:${duration},`);
         m3u8Content.push(`${file}`);
       });
 
       m3u8Content.push('#EXT-X-ENDLIST');
 
-      // Configurar el encabezado para indicar contenido HLS
       res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
       res.send(m3u8Content.join('\n'));
     } else {
