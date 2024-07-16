@@ -293,8 +293,11 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
         }
 
         const tempFiles = fs.existsSync(tempDir) ? fs.readdirSync(tempDir) : [];
-
         tempFiles.forEach(file => {
+          if (file.endsWith('.m3u8')) {
+            return;
+          }
+
           const tempFile = path.join(tempDir, file);
           const destFile = path.join(destDir, file);
 
@@ -490,57 +493,70 @@ app.get('/stream/:streamKey', async (req, res) => {
   }
 });
 
-
-app.get('/stream/vod/:streamKey', async (req, res) => {
+app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
   const storageDir = path.join(__dirname, 'media', 'storage', 'live');
-  const streamKeyreq = req.params.streamKey;
-  const vodFolder = path.join(storageDir, streamKeyreq);
+  const streamKey = req.params.streamKey;
+  const vodFolder = path.join(storageDir, streamKey);
 
-  console.log(`Verificando el VOD para el streamKey: ${streamKeyreq} en ${vodFolder}`);
   try {
-    const m3u8Path = path.join(vodFolder, 'index.m3u8');
-    console.log(`Buscando archivo: ${m3u8Path}`);
+    // Obtener lista de archivos .ts en el directorio y ordenarlos
+    const files = fs.readdirSync(vodFolder)
+      .filter(file => file.endsWith('.ts'))
+      .sort((a, b) => {
+        const aIndex = parseInt(a.replace('index', '').replace('.ts', ''), 10);
+        const bIndex = parseInt(b.replace('index', '').replace('.ts', ''), 10);
+        return aIndex - bIndex;
+      });
 
-    if (fs.existsSync(m3u8Path)) {
+    if (files.length > 0) {
+      // Generar contenido del archivo .m3u8
+      const m3u8Content = [
+        '#EXTM3U',
+        '#EXT-X-VERSION:3',
+        '#EXT-X-ALLOW-CACHE:YES',
+        '#EXT-X-TARGETDURATION:10',
+        '#EXT-X-MEDIA-SEQUENCE:0'
+      ];
+
+      files.forEach(file => {
+        const duration = 10; // Duración estimada del segmento. Ajusta según tus necesidades
+        m3u8Content.push(`#EXTINF:${duration},`);
+        m3u8Content.push(`${file}`);
+      });
+
+      m3u8Content.push('#EXT-X-ENDLIST');
+
+      // Configurar el encabezado para indicar contenido HLS
       res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-      const m3u8Stream = fs.createReadStream(m3u8Path);
-      m3u8Stream.pipe(res);
-      console.log(`Archivo encontrado: ${m3u8Path}`);
-      console.log("Transmisión del archivo .m3u8 iniciada");
+      res.send(m3u8Content.join('\n'));
     } else {
-      console.log(`Archivo .m3u8 no encontrado en: ${m3u8Path}`);
       res.status(404).send('VOD no encontrado.');
     }
   } catch (error) {
-    console.error('Error al servir VOD:', error);
+    console.error('Error al generar el archivo .m3u8:', error);
     res.status(500).send('Error interno al procesar la solicitud.');
   }
 });
 
-app.get('/stream/vod/:streamKey/:tsFile', async (req, res) => {
+app.get('/stream/vod/:streamKey/:file', (req, res) => {
   const storageDir = path.join(__dirname, 'media', 'storage', 'live');
-  const streamKeyreq = req.params.streamKey;
-  const tsFile = req.params.tsFile;
-  const tsFilePath = path.join(storageDir, streamKeyreq, tsFile);
+  const streamKey = req.params.streamKey;
+  const file = req.params.file;
+  const filePath = path.join(storageDir, streamKey, file);
 
-  console.log(`Verificando el segmento para el streamKey: ${streamKeyreq} y archivo: ${tsFile}`);
-  console.log(`Buscando archivo: ${tsFilePath}`);
-  try {
-    if (fs.existsSync(tsFilePath)) {
+  if (fs.existsSync(filePath)) {
+    if (file.endsWith('.m3u8')) {
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    } else if (file.endsWith('.ts')) {
       res.setHeader('Content-Type', 'video/MP2T');
-      const tsStream = fs.createReadStream(tsFilePath);
-      tsStream.pipe(res);
-      console.log(`Segmento encontrado: ${tsFilePath}`);
-      console.log(`Transmisión del segmento .ts ${tsFile} iniciada`);
-    } else {
-      console.log(`Segmento no encontrado en: ${tsFilePath}`);
-      res.status(404).send('Segmento no encontrado.');
     }
-  } catch (error) {
-    console.error('Error al servir segmento:', error);
-    res.status(500).send('Error interno al procesar la solicitud.');
+    const stream = fs.createReadStream(filePath);
+    stream.pipe(res);
+  } else {
+    res.status(404).send('Archivo no encontrado');
   }
 });
+
 
 nms.run();
 app.listen(8002, () => {
