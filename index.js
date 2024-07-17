@@ -325,25 +325,6 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
     }
   }
 });
-
-function getNewestFile(files, path) {
-  var out = [];
-  var files = files.filter(function (file) {
-    return file.indexOf(".mp4") !== -1;
-  })
-
-  files.forEach(function (file) {
-    var stats = fs.statSync(path + "/" + file);
-    if (stats.isFile()) {
-      out.push({ "file": file, "mtime": stats.mtime.getTime() });
-    }
-  });
-  out.sort(function (a, b) {
-    return b.mtime - a.mtime;
-  })
-  return (out.length > 0) ? out[0].file : "";
-}
-
 async function getChunksFromFolder(folderPath) {
   try {
     const isFolderExists = await fs.promises.access(folderPath, fs.constants.F_OK)
@@ -364,6 +345,7 @@ async function getChunksFromFolder(folderPath) {
       const stats = await fs.promises.stat(filePath);
       return { file, stats };
     }));
+
 
     tsFilesWithStats.sort((a, b) => a.stats.mtime.getTime() - b.stats.mtime.getTime());
 
@@ -401,6 +383,7 @@ async function getChunksFromFolder(folderPath) {
     throw error;
   }
 }
+
 function convertToMP4(chunks, totalKeyreq) {
   return new Promise((resolve, reject) => {
     try {
@@ -447,6 +430,8 @@ function convertToMP4(chunks, totalKeyreq) {
     }
   });
 }
+
+
 async function getVideoDurationInSeconds(filePath) {
   return new Promise((resolve, reject) => {
     const ffprobeProcess = spawn('ffprobe', [
@@ -466,6 +451,8 @@ async function getVideoDurationInSeconds(filePath) {
     });
   });
 }
+
+
 
 app.get('/stream/:streamKey', async (req, res) => {
   const streamKeyreq = req.params.streamKey;
@@ -492,6 +479,7 @@ app.get('/stream/:streamKey', async (req, res) => {
     return res.status(500).send('Error interno al procesar la solicitud.');
   }
 });
+
 
 app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
   const storageDir = path.join(__dirname, 'media', 'storage', 'live');
