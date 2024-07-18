@@ -10,7 +10,7 @@ const ffmpeg = require('fluent-ffmpeg');
 ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
 
 const { getUserByKey, AverageViewers } = require("./controllers/userCtrl");
-
+const useExtractor = require("./middlewares/auth.middleware")
 var fs = require('fs');
 const spawn = require('child_process').spawn;
 
@@ -153,6 +153,23 @@ async function resumeStream(streamer) {
 async function getStreamingsOnline() {
   try {
     const data = await axios.get(process.env.BACKEND_URL + `/stream/get_streamings_online`);
+    if (data != null && data != undefined) {
+      return data.data;
+    }
+  } catch (error) {
+    console.log('Error while calling getStreamingsOnline', error);
+  }
+}
+async function TimeOutClipCreate(token) {
+  const config = {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  };
+  try {
+    const data = await axios.get(process.env.BACKEND_URL + `/clips/TimeOutClipCreate`,
+      config
+    );
     if (data != null && data != undefined) {
       return data.data;
     }
@@ -452,10 +469,11 @@ async function getVideoDurationInSeconds(filePath) {
   });
 }
 
-
-
-app.get('/stream/:streamKey', async (req, res) => {
+app.get('/stream/:streamKey', useExtractor, async (req, res) => {
   const streamKeyreq = req.params.streamKey;
+  const { token } = req
+  const time = await TimeOutClipCreate(token)
+  console.log(time);
   const currentFolder = process.cwd();
   const mediaFolder = path.join(currentFolder, 'media', 'live', streamKeyreq);
 
@@ -481,7 +499,8 @@ app.get('/stream/:streamKey', async (req, res) => {
 });
 
 
-app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
+app.get('/stream/vod/:streamKey/index.m3u8', useExtractor, async (req, res) => {
+  console.log("JEJEEJ");
   const storageDir = path.join(__dirname, 'media', 'storage', 'live');
   const streamKey = req.params.streamKey;
   const vodFolder = path.join(storageDir, streamKey);
@@ -523,7 +542,7 @@ app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
   }
 });
 
-app.get('/stream/vod/:streamKey/:file', (req, res) => {
+app.get('/stream/vod/:streamKey/:file', useExtractor, (req, res) => {
   const storageDir = path.join(__dirname, 'media', 'storage', 'live');
   const streamKey = req.params.streamKey;
   const file = req.params.file;
