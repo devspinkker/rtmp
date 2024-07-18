@@ -359,6 +359,7 @@ nms.on('donePublish', async (id, StreamPath, args) => {
       const diffMinutes = Math.ceil(diffTime / (1000 * 60));
 
       if (diffDays > 30) {
+
         fs.rmdir(dir, { recursive: true }, (err) => {
           if (err) {
             console.error(`[Pinkker] [donePublish] Error al eliminar el directorio ${dir}:`, err);
