@@ -157,7 +157,7 @@ async function getStreamingsOnline() {
       return data.data;
     }
   } catch (error) {
-    console.log('Error while calling getStreamingsOnline', error);
+    return data.data;
   }
 }
 async function TimeOutClipCreate(token) {
@@ -174,7 +174,7 @@ async function TimeOutClipCreate(token) {
       return data.data;
     }
   } catch (error) {
-    console.log('Error while calling getStreamingsOnline', error);
+    return error;
   }
 }
 
@@ -253,7 +253,7 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
 
 
 
-; nms.on('donePublish', async (id, StreamPath, args) => {
+nms.on('donePublish', async (id, StreamPath, args) => {
   let totalKey;
 
   const key = StreamPath.replace(/\//g, '');
@@ -270,6 +270,8 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
 
   const sourceDir = path.join(__dirname, 'media', 'live', totalKey);
   const tempDir = path.join(__dirname, 'media', 'temp', totalKey);
+  const liveDirClear = path.join(__dirname, 'media', "storage", 'live');
+
   const files = fs.existsSync(sourceDir) ? fs.readdirSync(sourceDir) : [];
 
   console.log(`[Pinkker] [donePublish] Archivos en ${sourceDir}:`, files);
@@ -319,10 +321,8 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
           const destFile = path.join(destDir, file);
 
           if (fs.existsSync(tempFile)) {
-            console.log(`[Debug] Moviendo archivo ${tempFile} a ${destFile}`);
             try {
               fs.renameSync(tempFile, destFile);
-              console.log(`[Pinkker] [donePublish] Archivo movido de ${tempFile} a ${destFile}`);
             } catch (error) {
               console.error(`[Pinkker] [donePublish] Error al mover archivo ${tempFile} a ${destFile}:`, error);
             }
@@ -341,6 +341,34 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       clearInterval(nms.getSession(id).user.interval);
     }
   }
+  const directories = fs.readdirSync(liveDirClear, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory())
+    .map(dirent => path.join(liveDirClear, dirent.name));
+
+  directories.forEach(dir => {
+    fs.stat(dir, (err, stats) => {
+      if (err) {
+        console.error(`[Pinkker] [donePublish] Error al obtener estadísticas del directorio ${dir}:`, err);
+        return;
+      }
+
+      const creationTime = new Date(stats.birthtime);
+      const now = new Date();
+      const diffTime = Math.abs(now - creationTime);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffMinutes = Math.ceil(diffTime / (1000 * 60));
+
+      if (diffDays > 30) {
+        fs.rmdir(dir, { recursive: true }, (err) => {
+          if (err) {
+            console.error(`[Pinkker] [donePublish] Error al eliminar el directorio ${dir}:`, err);
+          } else {
+            console.log(`[Pinkker] [donePublish] Directorio eliminado ${dir} porque tenía más de 30 días`);
+          }
+        });
+      }
+    });
+  });
 });
 async function getChunksFromFolder(folderPath) {
   try {
@@ -472,8 +500,11 @@ async function getVideoDurationInSeconds(filePath) {
 app.get('/stream/:streamKey', useExtractor, async (req, res) => {
   const streamKeyreq = req.params.streamKey;
   const { token } = req
+
   const time = await TimeOutClipCreate(token)
-  console.log(time);
+  if (time.message !== "StatusOK") {
+    return res.status(500).send('demasiados intentos para  crear clips.');
+  }
   const currentFolder = process.cwd();
   const mediaFolder = path.join(currentFolder, 'media', 'live', streamKeyreq);
 

@@ -71,15 +71,12 @@ const generateStreamThumbnail = async (key, cmt) => {
                         try {
                             fs.unlinkSync(thumbnailPath);
                         } catch (unlinkError) {
-                            console.error('Error deleting file:', unlinkError.message);
                         }
                     }
                 } catch (cloudinaryError) {
-                    console.error('Error uploading to Cloudinary:', cloudinaryError);
                 }
             }, 10000)
         } catch (error) {
-            console.error('Error generating thumbnail:', error);
         }
     }, 30000);
 };
@@ -90,7 +87,6 @@ const uploadStream = async (file_name, stream_key) => {
 
     // Verificar si el archivo existe
     if (!fs.existsSync(filePath)) {
-        console.error('Error uploading to Cloudinary: El archivo no existe -', filePath);
         return;
     }
 
@@ -108,13 +104,10 @@ const uploadStream = async (file_name, stream_key) => {
             audio_volume: '-10dB'
         }, async (err, result) => {
             if (err) {
-                console.error('Error uploading to Cloudinary:', err.message);
             } else {
                 try {
                     await createVod(result.secure_url, stream_key);
-                    console.log("Vod Creado....");
                 } catch (error) {
-                    console.error('Error creating VOD:', error.message);
                 }
             }
         });
@@ -123,7 +116,6 @@ const uploadStream = async (file_name, stream_key) => {
 
 
 function getNewestFile(files, path) {
-    console.log(path);
 
     var out = [];
     var files = files.filter(function (file) {
@@ -166,7 +158,6 @@ const uploadClipToCloudinary = async (filePath) => {
                 console.error('Error uploading to Cloudinary:', err.message);
                 reject(new Error('Error uploading to Cloudinary: ' + err.message));
             } else {
-                console.log(result.secure_url);
                 resolve(result.secure_url);
             }
         });
