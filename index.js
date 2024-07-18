@@ -531,7 +531,7 @@ app.get('/stream/:streamKey', useExtractor, async (req, res) => {
 });
 
 
-app.get('/stream/vod/:streamKey/index.m3u8', useExtractor, async (req, res) => {
+app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
   console.log("JEJEEJ");
   const storageDir = path.join(__dirname, 'media', 'storage', 'live');
   const streamKey = req.params.streamKey;
