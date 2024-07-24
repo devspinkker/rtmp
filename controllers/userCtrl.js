@@ -10,6 +10,14 @@ async function getUserByKey(key) {
         return error
     }
 }
+async function GetUserBanInstream(key) {
+    try {
+        let response = await axios.get(`${url}/GetUserBanInstream?key=${key}`);
+        return response.data.data;
+    } catch (error) {
+        return error
+    }
+}
 async function AverageViewers(StreamerID) {
     try {
         const response = await axios.post(`${url2}/StreamSummary/AverageViewers`, { StreamerID: StreamerID })
@@ -36,4 +44,4 @@ async function updateOnline(id, online) {
     }
 }
 
-module.exports = { getUserByKey, updateOnline, getUserByCmt, AverageViewers }
+module.exports = { getUserByKey, updateOnline, getUserByCmt, AverageViewers, GetUserBanInstream }

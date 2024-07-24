@@ -9,7 +9,7 @@ const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
 
-const { getUserByKey, AverageViewers } = require("./controllers/userCtrl");
+const { getUserByKey, AverageViewers, GetUserBanInstream } = require("./controllers/userCtrl");
 const useExtractor = require("./middlewares/auth.middleware")
 var fs = require('fs');
 const spawn = require('child_process').spawn;
@@ -207,10 +207,6 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
     }
   }
 
-  // Crear carpeta de medios si no existe
-
-
-  // Verificar el número de transmisiones online
   const streamingsOnline = await getStreamingsOnline();
   if ((!user.verified && streamingsOnline.data >= 20) || (user.verified && streamingsOnline.data >= 50)) {
     console.log("[Pinkker] Máximo de streamings online alcanzado");
@@ -229,17 +225,16 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
     await updateTimeStart(user.keyTransmission, date);
     console.log(`[Pinkker] [PrePublish] Inicio del Stream para ${user.NameUser} con la clave ${user.keyTransmission}`);
 
-    // Intervalo para verificar si el usuario está prohibido
     const bannedCheckInterval = setInterval(async () => {
-      const updatedUser = await getUserByKey("live" + totalKey);
-      if (updatedUser?.Banned) {
+      const Banned = await GetUserBanInstream("live" + totalKey);
+      if (Banned) {
         console.log(`[Pinkker] Stream apagado debido a prohibición del usuario ${user.NameUser}`);
         session.reject();
         clearInterval(bannedCheckInterval);
         clearInterval(session.user?.interval);
         clearInterval(session.user?.secondInterval);
       }
-    }, 5 * 60 * 1000);
+    }, 1000);
 
     session.user = { bannedCheckInterval };
 
