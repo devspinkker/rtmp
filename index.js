@@ -194,67 +194,75 @@ nms.on('doneConnect', (id, args) => {
 
 nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   const session = nms.getSession(id);
-  let date_pc = new Date();
-  date_pc.setHours(date_pc.getHours() - 3);
-
   const key = StreamPath.replace(/\//g, "");
+  let totalKey = key.length === 49 ? key.substring(4, key.length) : key;
+  console.log(key);
+  const user = await getUserByKey("live" + totalKey);
 
-  const user = await getUserByKey(key);
-
-  let totalKey;
-
-  if (key.length === 49) {
-    totalKey = key.substring(4, key.length);
-  } else {
-    totalKey = key;
+  if (user?.Banned) {
+    console.log("[Pinkker] Usuario no encontrado o prohibido");
+    if (user.NameUser !== "") {
+      session.reject();
+      return;
+    }
   }
-  if (!user?.keyTransmission || user?.Banned) {
-    console.log("[Pinkker] Usuario no encontrado");
+
+  // Crear carpeta de medios si no existe
+
+
+  // Verificar el número de transmisiones online
+  const streamingsOnline = await getStreamingsOnline();
+  if ((!user.verified && streamingsOnline.data >= 20) || (user.verified && streamingsOnline.data >= 50)) {
+    console.log("[Pinkker] Máximo de streamings online alcanzado");
+    session.reject();
     return;
   }
+  if (user.NameUser !== "") {
+    const mediaFolder = path.join(__dirname, 'media', 'live', totalKey);
 
-  const mediaFolder = path.join(__dirname, 'media', 'live', totalKey);
-  if (!fs.existsSync(mediaFolder)) {
-    fs.mkdirSync(mediaFolder, { recursive: true });
-  }
-
-  const streamingsOnline = await getStreamingsOnline();
-
-  if (!user.verified && streamingsOnline.data >= 20) {
-    console.log("[Pinkker] Máximo de streamings online para usuario no verificado");
-  } else if (user.verified && streamingsOnline.data >= 50) {
-    console.log("[Pinkker] Máximo de streamings online para usuario verificado");
-  } else {
-
+    if (!fs.existsSync(mediaFolder)) {
+      fs.mkdirSync(mediaFolder, { recursive: true });
+    }
+    // Actualizar estado del usuario y comenzar la transmisión
     let date = new Date().getTime();
     await updateOnline(user.keyTransmission, true);
     await updateTimeStart(user.keyTransmission, date);
-    const rtmpUrl = `rtmp://localhost:1935/live/${user.keyTransmission}`;
-    console.log(rtmpUrl);
-    console.log('[Pinkker] [PrePublish] Inicio del Stream para ' + user.NameUser + " con la clave " + user.keyTransmission);
+    console.log(`[Pinkker] [PrePublish] Inicio del Stream para ${user.NameUser} con la clave ${user.keyTransmission}`);
+
+    // Intervalo para verificar si el usuario está prohibido
+    const bannedCheckInterval = setInterval(async () => {
+      const updatedUser = await getUserByKey("live" + totalKey);
+      if (updatedUser?.Banned) {
+        console.log(`[Pinkker] Stream apagado debido a prohibición del usuario ${user.NameUser}`);
+        session.reject();
+        clearInterval(bannedCheckInterval);
+        clearInterval(session.user?.interval);
+        clearInterval(session.user?.secondInterval);
+      }
+    }, 5 * 60 * 1000);
+
+    session.user = { bannedCheckInterval };
+
     if (cmt) {
+      // Intervalo para actualizar el promedio de espectadores
       const interval = setInterval(async () => {
         await AverageViewers(user.id);
-      }, 3 * 60 * 1000);
-      session.user = { interval };
+      }, 5 * 60 * 1000);
+      session.user.interval = interval;
 
+      // Intervalo para generar miniaturas del stream
       const secondInterval = setInterval(async () => {
         await helpers.generateStreamThumbnail(user.keyTransmission, cmt);
       }, 5 * 60 * 1000);
-
       session.user.secondInterval = secondInterval;
     }
-
-    return;
   }
-
-  session.reject();
 });
-
 
 
 nms.on('donePublish', async (id, StreamPath, args) => {
   let totalKey;
+
 
   const key = StreamPath.replace(/\//g, '');
 
@@ -263,7 +271,6 @@ nms.on('donePublish', async (id, StreamPath, args) => {
   } else {
     totalKey = key;
   }
-
   if (totalKey.includes('_')) {
     return;
   }
