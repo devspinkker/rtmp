@@ -19,7 +19,7 @@ app.use(cors());
 const config = {
   rtmp: {
     port: 1935,
-    chunk_size: 2000,
+    chunk_size: 4096,
     gop_cache: true,
     ping: 30,
     ping_timeout: 60
@@ -47,7 +47,7 @@ const config = {
         h264_level: "4.1",
         hls_wait_keyframe: true,
         dashKeep: true,
-        gop: 130,
+        gop: 60,
       },
       {
         app: "live",
@@ -59,7 +59,7 @@ const config = {
         h264_level: "4.1",
         gpu: 0,
         hls_wait_keyframe: true,
-        gop: 130,
+        gop: 60,
         dashKeep: true,
       },
       {
@@ -72,7 +72,7 @@ const config = {
         hevc_level: "4.1",
         gpu: 0,
         hls_wait_keyframe: true,
-        gop: 130,
+        gop: 60,
         dashKeep: true,
       },
     ],
@@ -89,18 +89,27 @@ const config = {
             vb: "1500k",
             vs: "1280x720",
             vf: "30",
+            gop: "60",
+            preset: "veryfast",
+            crf: "27",
           },
           {
             ab: "96k",
             vb: "1000k",
             vs: "854x480",
             vf: "24",
+            gop: "48",
+            preset: "veryfast",
+            crf: "27",
           },
           {
             ab: "96k",
             vb: "600k",
             vs: "640x360",
             vf: "20",
+            gop: "40",
+            preset: "veryfast",
+            crf: "27",
           },
         ],
       },
@@ -234,7 +243,7 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
         clearInterval(session.user?.interval);
         clearInterval(session.user?.secondInterval);
       }
-    }, 1000);
+    }, 3 * 60 * 1000);
 
     session.user = { bannedCheckInterval };
 
@@ -534,7 +543,6 @@ app.get('/stream/:streamKey', useExtractor, async (req, res) => {
 
 
 app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
-  console.log("JEJEEJ");
   const storageDir = path.join(__dirname, 'media', 'storage', 'live');
   const streamKey = req.params.streamKey;
   const vodFolder = path.join(storageDir, streamKey);
@@ -576,7 +584,7 @@ app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
   }
 });
 
-app.get('/stream/vod/:streamKey/:file', useExtractor, (req, res) => {
+app.get('/stream/vod/:streamKey/:file', (req, res) => {
   const storageDir = path.join(__dirname, 'media', 'storage', 'live');
   const streamKey = req.params.streamKey;
   const file = req.params.file;
