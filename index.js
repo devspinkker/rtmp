@@ -40,48 +40,41 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
-        hlsKeep: false,
+        hlsFlags: "[hls_time=1:hls_list_size=10]",
+        hlsKeep: true,
         vc: "libx264",
         h264_profile: "main",
         h264_level: "4.1",
         hls_wait_keyframe: true,
-        dashKeep: false,
+        dashKeep: true,
         gop: 60,
       },
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
-        hlsKeep: false,
+        hlsFlags: "[hls_time=1:hls_list_size=10]",
+        hlsKeep: true,
         vc: "h264_nvenc",
         h264_profile: "main",
         h264_level: "4.1",
         gpu: 0,
         hls_wait_keyframe: true,
         gop: 60,
-        dashKeep: false,
+        dashKeep: true,
       },
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10:hls_flags=delete_segments]",
-        hlsKeep: false,
+        hlsFlags: "[hls_time=1:hls_list_size=10]",
+        hlsKeep: true,
         vc: "hevc_nvenc",
         hevc_profile: "main",
         hevc_level: "4.1",
         gpu: 0,
         hls_wait_keyframe: true,
         gop: 60,
-        dashKeep: false,
+        dashKeep: true,
       },
-      {
-        app: 'live',
-        mp4: true,
-        mp4Flags: '[movflags=frag_keyframe+empty_moov]',
-      }
-
-
     ],
     MediaRoot: "./media",
   },
@@ -97,7 +90,7 @@ const config = {
             vs: "1280x720",
             vf: "30",
             gop: "60",
-            preset: "ultrafast",
+            preset: "veryfast",
             crf: "27",
           },
           // {
@@ -106,7 +99,7 @@ const config = {
           //   vs: "854x480",
           //   vf: "24",
           //   gop: "48",
-          //   preset: "ultrafast",
+          //   preset: "veryfast",
           //   crf: "27",
           // },
           // {
@@ -115,7 +108,7 @@ const config = {
           //   vs: "640x360",
           //   vf: "20",
           //   gop: "40",
-          //   preset: "ultrafast",
+          //   preset: "veryfast",
           //   crf: "27",
           // },
         ],
@@ -195,7 +188,6 @@ async function TimeOutClipCreate(token) {
 }
 
 const { PassThrough } = require('stream');
-const { log } = require('console');
 
 
 var nms = new NodeMediaServer(config);
@@ -272,30 +264,12 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
 });
 
 
-// Función para mover archivos con reintentos
-const moveFileWithRetry = (sourceFile, destFile, attempts = 5, delay = 500) => {
-  let attempt = 0;
-  const moveFile = () => {
-    attempt++;
-    try {
-      fs.renameSync(sourceFile, destFile);
-      console.log(`[Pinkker] [donePublish] Archivo movido de ${sourceFile} a ${destFile}`);
-    } catch (error) {
-      if (error.code === 'EBUSY' && attempt < attempts) {
-        console.log(`[Pinkker] [donePublish] Intento ${attempt} fallido, reintentando en ${delay}ms...`);
-        setTimeout(moveFile, delay);
-      } else {
-        console.error(`[Pinkker] [donePublish] Error al mover archivo ${sourceFile} a ${destFile}:`, error);
-      }
-    }
-  };
-  moveFile();
-};
-
 nms.on('donePublish', async (id, StreamPath, args) => {
   let totalKey;
 
+
   const key = StreamPath.replace(/\//g, '');
+
   if (key.length === 49) {
     totalKey = key.substring(4, key.length);
   } else {
@@ -305,17 +279,35 @@ nms.on('donePublish', async (id, StreamPath, args) => {
     return;
   }
 
-  // Directorios fuente y destino
-  const sourceDirs = [
-    path.join(__dirname, 'media', 'live', totalKey),
-    path.join(__dirname, 'media', 'live', totalKey + '_720'),
-    path.join(__dirname, 'media', 'live', totalKey + '_360'),
-    path.join(__dirname, 'media', 'live', totalKey + '_480')
-  ];
+  const sourceDir = path.join(__dirname, 'media', 'live', totalKey);
+  const tempDir = path.join(__dirname, 'media', 'temp', totalKey);
+  const liveDirClear = path.join(__dirname, 'media', "storage", 'live');
 
-  const liveDirClear = path.join(__dirname, 'media', 'storage', 'live');
+  const files = fs.existsSync(sourceDir) ? fs.readdirSync(sourceDir) : [];
 
-  // Mover archivos al directorio correcto basado en `res.data.data`
+  console.log(`[Pinkker] [donePublish] Archivos en ${sourceDir}:`, files);
+
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+
+  files.forEach(file => {
+    const sourceFile = path.join(sourceDir, file);
+    const tempFile = path.join(tempDir, file);
+
+    if (fs.existsSync(sourceFile)) {
+      console.log(`[Debug] Moviendo archivo ${sourceFile} a ${tempFile}`);
+      try {
+        fs.renameSync(sourceFile, tempFile);
+        console.log(`[Pinkker] [donePublish] Archivo movido de ${sourceFile} a ${tempFile}`);
+      } catch (error) {
+        console.error(`[Pinkker] [donePublish] Error al mover archivo ${sourceFile} a ${tempFile}:`, error);
+      }
+    } else {
+      console.error(`[Pinkker] [donePublish] El archivo ${sourceFile} no existe.`);
+    }
+  });
+
   const user = await getUserByKey(key);
 
   if (user && user.keyTransmission) {
@@ -323,45 +315,30 @@ nms.on('donePublish', async (id, StreamPath, args) => {
 
     console.log(`[Pinkker] [donePublish] Stream apagado con la clave ${totalKey}`);
     if (res.data.data) {
-      const idStreamSu = res.data.data
-      const destDir = path.join(__dirname, 'media', 'storage', 'live', idStreamSu);
+      const destDir = path.join(__dirname, 'media', 'storage', 'live', res.data.data);
 
       try {
         if (!fs.existsSync(destDir)) {
           fs.mkdirSync(destDir, { recursive: true });
         }
 
-        // Mover archivos .mp4 desde sourceDirs a destDir
-        sourceDirs.forEach(sourceDir => {
-          if (fs.existsSync(sourceDir)) {
-            const files = fs.readdirSync(sourceDir);
-            files.forEach(file => {
-              if (file.endsWith('.mp4')) {
-                let resolution = '';
-                if (sourceDir.includes('_720')) {
-                  resolution = '_720';
-                } else if (sourceDir.includes('_360')) {
-                  resolution = '_360';
-                } else if (sourceDir.includes('_480')) {
-                  resolution = '_480';
-                }
+        const tempFiles = fs.existsSync(tempDir) ? fs.readdirSync(tempDir) : [];
+        tempFiles.forEach(file => {
+          if (file.endsWith('.m3u8')) {
+            return;
+          }
 
-                const newFileName = resolution ? `${idStreamSu}${resolution}.mp4` : `${idStreamSu}.mp4`;
-                const tempFile = path.join(sourceDir, file);
-                const destFile = path.join(destDir, newFileName);
+          const tempFile = path.join(tempDir, file);
+          const destFile = path.join(destDir, file);
 
-                if (fs.existsSync(tempFile)) {
-                  try {
-                    fs.renameSync(tempFile, destFile);
-                    console.log(`[Pinkker] [donePublish] Archivo movido de ${tempFile} a ${destFile}`);
-                  } catch (error) {
-                    console.error(`[Pinkker] [donePublish] Error al mover archivo ${tempFile} a ${destFile}:`, error);
-                  }
-                } else {
-                  console.error(`[Pinkker] [donePublish] El archivo ${tempFile} no existe.`);
-                }
-              }
-            });
+          if (fs.existsSync(tempFile)) {
+            try {
+              fs.renameSync(tempFile, destFile);
+            } catch (error) {
+              console.error(`[Pinkker] [donePublish] Error al mover archivo ${tempFile} a ${destFile}:`, error);
+            }
+          } else {
+            console.error(`[Pinkker] [donePublish] El archivo ${tempFile} no existe.`);
           }
         });
 
@@ -375,8 +352,6 @@ nms.on('donePublish', async (id, StreamPath, args) => {
       clearInterval(nms.getSession(id).user.interval);
     }
   }
-
-  // Limpiar directorios antiguos
   const directories = fs.readdirSync(liveDirClear, { withFileTypes: true })
     .filter(dirent => dirent.isDirectory())
     .map(dirent => path.join(liveDirClear, dirent.name));
@@ -392,8 +367,10 @@ nms.on('donePublish', async (id, StreamPath, args) => {
       const now = new Date();
       const diffTime = Math.abs(now - creationTime);
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const diffMinutes = Math.ceil(diffTime / (1000 * 60));
 
       if (diffDays > 30) {
+
         fs.rmdir(dir, { recursive: true }, (err) => {
           if (err) {
             console.error(`[Pinkker] [donePublish] Error al eliminar el directorio ${dir}:`, err);
@@ -405,7 +382,6 @@ nms.on('donePublish', async (id, StreamPath, args) => {
     });
   });
 });
-
 async function getChunksFromFolder(folderPath) {
   try {
     const isFolderExists = await fs.promises.access(folderPath, fs.constants.F_OK)
@@ -494,10 +470,10 @@ function convertToMP4(chunks, totalKeyreq) {
         .toFormat('mp4')
         .outputOptions(['-movflags', 'frag_keyframe+empty_moov'])
         .outputOptions(['-bsf:a', 'aac_adtstoasc'])
-        .outputOptions(['-preset', 'ultrafast'])  // Mantén ultrafast si el uso de CPU es una preocupación principal
-        .outputOptions(['-crf', '30'])  // Aumenta CRF para reducir aún más el uso de CPU
-        .outputOptions(['-maxrate', '1500k', '-bufsize', '3000k'])  // Reduce maxrate y bufsize para controlar el uso de recursos
-        .outputOptions(['-s', '854x480'])  // Considera bajar la resolución para ahorrar CPU
+        .outputOptions(['-preset', 'fast'])
+        .outputOptions(['-crf', '25'])
+        .outputOptions(['-maxrate', '2000k', '-bufsize', '4000k'])
+        .outputOptions(['-s', '1280x720'])
         .output(outputFilePath)
         .on('end', () => {
           resolve(outputFilePath);
@@ -506,7 +482,6 @@ function convertToMP4(chunks, totalKeyreq) {
           reject(stderr);
         })
         .run();
-
     } catch (error) {
       reject(error);
     }
@@ -534,108 +509,95 @@ async function getVideoDurationInSeconds(filePath) {
   });
 }
 
-app.get('/stream/:streamKey', useExtractor, async (req, res) => {
-  const streamKeyreq = req.params.streamKey;
-  const { token } = req
+// pedir clips
 
-  const time = await TimeOutClipCreate(token)
-  if (time.message !== "StatusOK") {
-    return res.status(500).send('demasiados intentos para  crear clips.');
-  }
-  const currentFolder = process.cwd();
-  const mediaFolder = path.join(currentFolder, 'media', 'live', streamKeyreq);
+// app.get('/stream/:streamKey', useExtractor, async (req, res) => {
+//   const streamKeyreq = req.params.streamKey;
+//   const { token } = req
+
+//   const time = await TimeOutClipCreate(token)
+//   if (time.message !== "StatusOK") {
+//     return res.status(500).send('demasiados intentos para  crear clips.');
+//   }
+//   const currentFolder = process.cwd();
+//   const mediaFolder = path.join(currentFolder, 'media', 'live', streamKeyreq);
+
+//   try {
+//     const chunks = await getChunksFromFolder(mediaFolder);
+
+//     if (chunks !== null && chunks.length > 0) {
+//       const mp4Buffer = await convertToMP4(chunks, streamKeyreq);
+
+//       const fileStream = fs.createReadStream(mp4Buffer);
+//       fileStream.on('error', (error) => {
+//         return res.status(500).send('Error interno al procesar la solicitud.');
+//       });
+
+//       fileStream.pipe(res);
+//     } else {
+//       return res.status(404).send('El streamer está offline o no hay búfer disponible.');
+//     }
+//   } catch (error) {
+//     console.error('Error en la solicitud /stream:', error);
+//     return res.status(500).send('Error interno al procesar la solicitud.');
+//   }
+// });
+app.get('/stream/:streamKey/index.m3u8', async (req, res) => {
+  const streamKey = req.params.streamKey;
+  const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
 
   try {
-    const chunks = await getChunksFromFolder(mediaFolder);
+    // Leer el archivo index.m3u8
+    const m3u8Content = await fs.promises.readFile(path.join(mediaFolder, 'index.m3u8'), 'utf8');
+    const lines = m3u8Content.split('\n');
 
-    if (chunks !== null && chunks.length > 0) {
-      const mp4Buffer = await convertToMP4(chunks, streamKeyreq);
+    // Filtrar solo los archivos .ts
+    const tsFiles = lines
+      .filter(line => line.endsWith('.ts'))
+      .map(line => path.join(mediaFolder, line.trim()));
 
-      const fileStream = fs.createReadStream(mp4Buffer);
-      fileStream.on('error', (error) => {
-        return res.status(500).send('Error interno al procesar la solicitud.');
-      });
+    // Obtener los últimos 10 archivos .ts
+    const last10Files = tsFiles.slice(-4);
 
-      fileStream.pipe(res);
-    } else {
-      return res.status(404).send('El streamer está offline o no hay búfer disponible.');
+    if (last10Files.length === 0) {
+      return res.status(404).send('No hay archivos .ts disponibles.');
     }
+
+    // Crear el contenido del m3u8
+    const m3u8ContentResponse = [
+      '#EXTM3U',
+      '#EXT-X-VERSION:3',
+      '#EXT-X-ALLOW-CACHE:YES',
+      '#EXT-X-TARGETDURATION:10',
+      '#EXT-X-MEDIA-SEQUENCE:0'
+    ];
+
+    last10Files.forEach(file => {
+      const duration = 10; // Ajusta según la duración real de cada archivo
+      m3u8ContentResponse.push(`#EXTINF:${duration},`);
+      m3u8ContentResponse.push(path.basename(file));
+    });
+
+    m3u8ContentResponse.push('#EXT-X-ENDLIST');
+
+    res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    res.send(m3u8ContentResponse.join('\n'));
   } catch (error) {
-    console.error('Error en la solicitud /stream:', error);
-    return res.status(500).send('Error interno al procesar la solicitud.');
+    console.error('Error al generar el archivo .m3u8:', error);
+    res.status(500).send('Error interno al procesar la solicitud.');
   }
 });
-
-
-app.get('/stream/vod/:streamKey/:resolution/index.m3u8', (req, res) => {
-  const storageDir = path.join(__dirname, 'media', 'storage', 'live');
-  const streamKey = req.params.streamKey;
-  const resolution = req.params.resolution;
-
-  // Define el directorio del VOD
-  const vodFolder = path.join(storageDir, streamKey + (resolution === 'original' ? '' : `_${resolution}`));
-  console.log("Ruta del directorio VOD:", vodFolder);
-
-  // Verifica si el directorio existe antes de intentar leerlo
-  if (fs.existsSync(vodFolder)) {
-    console.log("El directorio existe");
-
-    // Filtra los archivos MP4 que coinciden con la resolución dada
-    const mp4Files = fs.readdirSync(vodFolder)
-      .filter(file => file.endsWith('.mp4') && (resolution === 'original' ? !file.includes('_') : file.includes(`_${resolution}`)));
-    console.log("El directorio existe2 ");
-
-    if (mp4Files.length > 0) {
-      console.log("El directorio existe 3");
-
-      // Usa el primer archivo MP4 encontrado
-      const mp4File = mp4Files[0];
-      const filePath = path.join(vodFolder, mp4File);
-
-      // Crea el contenido del m3u8
-
-      const m3u8Content = [
-        '#EXTM3U',
-        '#EXT-X-VERSION:3',
-        '#EXT-X-ALLOW-CACHE:YES',
-        '#EXT-X-TARGETDURATION:10',
-        '#EXT-X-MEDIA-SEQUENCE:0',
-        '#EXTINF:10,',
-        `${mp4File}` // Asegúrate de que el archivo esté disponible en la misma carpeta
-      ];
-
-      m3u8Content.push('#EXT-X-ENDLIST');
-      console.log(fs.existsSync(filePath));
-
-      // Envía el archivo m3u8
-      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-      res.setHeader('Access-Control-Allow-Origin', '*'); // Permitir todas las solicitudes
-
-      res.send(m3u8Content.join('\n'));
-    } else {
-      res.status(404).send('VOD no encontrado.');
-    }
-  } else {
-    console.log("Directorio no encontrado:", vodFolder);
-    res.status(404).send('Directorio no encontrado.');
-  }
-});
-
-app.get('/stream/vod/:streamKey/:file', (req, res) => {
-  console.log("A223");
-
-  const storageDir = path.join(__dirname, 'media', 'storage', 'live');
+app.get('/stream/:streamKey/:file', (req, res) => {
   const streamKey = req.params.streamKey;
   const file = req.params.file;
-  const filePath = path.join(storageDir, streamKey, file);
+  const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
+  const filePath = path.join(mediaFolder, file);
 
-  // Verifica si el archivo existe antes de intentar leerlo
   if (fs.existsSync(filePath)) {
-    // Establece el tipo MIME correcto basado en la extensión del archivo
     if (file.endsWith('.m3u8')) {
       res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-    } else if (file.endsWith('.mp4')) {
-      res.setHeader('Content-Type', 'video/mp4');
+    } else if (file.endsWith('.ts')) {
+      res.setHeader('Content-Type', 'video/MP2T');
     }
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);
@@ -643,6 +605,69 @@ app.get('/stream/vod/:streamKey/:file', (req, res) => {
     res.status(404).send('Archivo no encontrado');
   }
 });
+
+// consumir vods
+app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
+  const storageDir = path.join(__dirname, 'media', 'storage', 'live');
+  const streamKey = req.params.streamKey;
+  const vodFolder = path.join(storageDir, streamKey);
+
+  try {
+    const files = fs.readdirSync(vodFolder)
+      .filter(file => file.endsWith('.ts'))
+      .sort((a, b) => {
+        const aIndex = parseInt(a.replace('index', '').replace('.ts', ''), 10);
+        const bIndex = parseInt(b.replace('index', '').replace('.ts', ''), 10);
+        return aIndex - bIndex;
+      });
+
+    if (files.length > 0) {
+      const m3u8Content = [
+        '#EXTM3U',
+        '#EXT-X-VERSION:3',
+        '#EXT-X-ALLOW-CACHE:YES',
+        '#EXT-X-TARGETDURATION:10',
+        '#EXT-X-MEDIA-SEQUENCE:0'
+      ];
+
+      files.forEach(file => {
+        const duration = 10;
+        m3u8Content.push(`#EXTINF:${duration},`);
+        m3u8Content.push(`${file}`);
+      });
+
+      m3u8Content.push('#EXT-X-ENDLIST');
+
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+      res.send(m3u8Content.join('\n'));
+    } else {
+      res.status(404).send('VOD no encontrado.');
+    }
+  } catch (error) {
+    console.error('Error al generar el archivo .m3u8:', error);
+    res.status(500).send('Error interno al procesar la solicitud.');
+  }
+});
+
+app.get('/stream/vod/:streamKey/:file', (req, res) => {
+  const storageDir = path.join(__dirname, 'media', 'storage', 'live');
+  const streamKey = req.params.streamKey;
+  const file = req.params.file;
+  const filePath = path.join(storageDir, streamKey, file);
+
+  if (fs.existsSync(filePath)) {
+    if (file.endsWith('.m3u8')) {
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    } else if (file.endsWith('.ts')) {
+      res.setHeader('Content-Type', 'video/MP2T');
+    }
+    const stream = fs.createReadStream(filePath);
+    stream.pipe(res);
+  } else {
+    res.status(404).send('Archivo no encontrado');
+  }
+});
+
 
 nms.run();
 app.listen(8002, () => {
