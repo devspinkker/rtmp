@@ -47,7 +47,9 @@ const config = {
         h264_level: "4.1",
         hls_wait_keyframe: true,
         dashKeep: true,
-        gop: 60,
+        vf: "60", // fps
+        gop: "120",
+        flags: "-b:v 6000k",
       },
       {
         app: "live",
@@ -59,8 +61,10 @@ const config = {
         h264_level: "4.1",
         gpu: 0,
         hls_wait_keyframe: true,
-        gop: 60,
         dashKeep: true,
+        vf: "60", // fps
+        gop: "120",
+        flags: "-b:v 6000k",
       },
       {
         app: "live",
@@ -72,8 +76,10 @@ const config = {
         hevc_level: "4.1",
         gpu: 0,
         hls_wait_keyframe: true,
-        gop: 60,
+        vf: "60", // fps
+        gop: "120",
         dashKeep: true,
+        flags: "-b:v 6000k",
       },
     ],
     MediaRoot: "./media",
@@ -88,29 +94,29 @@ const config = {
             ab: "128k",
             vb: "1500k",
             vs: "1280x720",
-            vf: "30",
-            gop: "60",
+            vf: "60",
+            gop: "120",
             preset: "veryfast",
             crf: "27",
           },
-          // {
-          //   ab: "96k",
-          //   vb: "1000k",
-          //   vs: "854x480",
-          //   vf: "24",
-          //   gop: "48",
-          //   preset: "veryfast",
-          //   crf: "27",
-          // },
-          // {
-          //   ab: "96k",
-          //   vb: "600k",
-          //   vs: "640x360",
-          //   vf: "20",
-          //   gop: "40",
-          //   preset: "veryfast",
-          //   crf: "27",
-          // },
+          {
+            ab: "96k",
+            vb: "1000k",
+            vs: "854x480",
+            vf: "24",
+            gop: "48",
+            preset: "veryfast",
+            crf: "27",
+          },
+          {
+            ab: "96k",
+            vb: "600k",
+            vs: "640x360",
+            vf: "20",
+            gop: "40",
+            preset: "veryfast",
+            crf: "27",
+          },
         ],
       },
     ],
@@ -217,11 +223,27 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   }
 
   const streamingsOnline = await getStreamingsOnline();
-  if ((!user.verified && streamingsOnline.data >= 20) || (user.verified && streamingsOnline.data >= 50)) {
-    console.log("[Pinkker] Máximo de streamings online alcanzado");
-    session.reject();
-    return;
+
+  // if (user.NameUser) {
+  //   if ((!user.Partner.Active && streamingsOnline.data >= 20) || (user.Partner.Active && streamingsOnline.data >= 50)) {
+  //     console.log("[Pinkker] Máximo de streamings online alcanzado");
+  //     session.reject();
+  //     return;
+  //   }
+  // }
+
+  // por ahora asi tiene que estar
+  console.log(user)
+  if (user.NameUser) {
+    console.log(user.Partne)
+
+    if (!user.Partner.active) {
+      console.log("[Pinkker] Máximo de streamings online alcanzado");
+      session.reject();
+      return;
+    }
   }
+
   if (user.NameUser !== "") {
     const mediaFolder = path.join(__dirname, 'media', 'live', totalKey);
 
@@ -556,8 +578,8 @@ app.get('/stream/:streamKey/index.m3u8', async (req, res) => {
       .filter(line => line.endsWith('.ts'))
       .map(line => path.join(mediaFolder, line.trim()));
 
-    // Obtener los últimos 10 archivos .ts
-    const last10Files = tsFiles.slice(-4);
+    // Obtener los últimos 10 archivos .ts 
+    const last10Files = tsFiles.slice(-10);
 
     if (last10Files.length === 0) {
       return res.status(404).send('No hay archivos .ts disponibles.');
