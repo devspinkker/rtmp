@@ -235,9 +235,8 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   // por ahora asi tiene que estar
   console.log(user)
   if (user.NameUser) {
-    console.log(user.Partne)
 
-    if (!user.Partner.active) {
+    if ((!user.Partner.active && streamingsOnline.data >= 5) || (user.Partner.active && streamingsOnline.data >= 10)) {
       console.log("[Pinkker] Máximo de streamings online alcanzado");
       session.reject();
       return;
@@ -391,16 +390,16 @@ nms.on('donePublish', async (id, StreamPath, args) => {
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
       const diffMinutes = Math.ceil(diffTime / (1000 * 60));
 
-      if (diffDays > 30) {
+      // if (diffDays > 30) {
 
-        fs.rmdir(dir, { recursive: true }, (err) => {
-          if (err) {
-            console.error(`[Pinkker] [donePublish] Error al eliminar el directorio ${dir}:`, err);
-          } else {
-            console.log(`[Pinkker] [donePublish] Directorio eliminado ${dir} porque tenía más de 30 días`);
-          }
-        });
-      }
+      //   fs.rmdir(dir, { recursive: true }, (err) => {
+      //     if (err) {
+      //       console.error(`[Pinkker] [donePublish] Error al eliminar el directorio ${dir}:`, err);
+      //     } else {
+      //       console.log(`[Pinkker] [donePublish] Directorio eliminado ${dir} porque tenía más de 30 días`);
+      //     }
+      //   });
+      // }
     });
   });
 });
@@ -531,39 +530,7 @@ async function getVideoDurationInSeconds(filePath) {
   });
 }
 
-// pedir clips
 
-// app.get('/stream/:streamKey', useExtractor, async (req, res) => {
-//   const streamKeyreq = req.params.streamKey;
-//   const { token } = req
-
-//   const time = await TimeOutClipCreate(token)
-//   if (time.message !== "StatusOK") {
-//     return res.status(500).send('demasiados intentos para  crear clips.');
-//   }
-//   const currentFolder = process.cwd();
-//   const mediaFolder = path.join(currentFolder, 'media', 'live', streamKeyreq);
-
-//   try {
-//     const chunks = await getChunksFromFolder(mediaFolder);
-
-//     if (chunks !== null && chunks.length > 0) {
-//       const mp4Buffer = await convertToMP4(chunks, streamKeyreq);
-
-//       const fileStream = fs.createReadStream(mp4Buffer);
-//       fileStream.on('error', (error) => {
-//         return res.status(500).send('Error interno al procesar la solicitud.');
-//       });
-
-//       fileStream.pipe(res);
-//     } else {
-//       return res.status(404).send('El streamer está offline o no hay búfer disponible.');
-//     }
-//   } catch (error) {
-//     console.error('Error en la solicitud /stream:', error);
-//     return res.status(500).send('Error interno al procesar la solicitud.');
-//   }
-// });
 app.get('/stream/:streamKey/index.m3u8', async (req, res) => {
   const streamKey = req.params.streamKey;
   const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
