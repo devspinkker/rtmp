@@ -13,6 +13,7 @@ const { getUserByKey, AverageViewers, GetUserBanInstream } = require("./controll
 const useExtractor = require("./middlewares/auth.middleware")
 var fs = require('fs');
 const spawn = require('child_process').spawn;
+const exec = require('child_process').exec;
 
 app.use(cors());
 
@@ -284,10 +285,8 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   }
 });
 
-
 nms.on('donePublish', async (id, StreamPath, args) => {
   let totalKey;
-
 
   const key = StreamPath.replace(/\//g, '');
 
@@ -312,6 +311,7 @@ nms.on('donePublish', async (id, StreamPath, args) => {
     fs.mkdirSync(tempDir, { recursive: true });
   }
 
+  // Mover los archivos .ts a la carpeta temporal
   files.forEach(file => {
     const sourceFile = path.join(sourceDir, file);
     const tempFile = path.join(tempDir, file);
@@ -344,26 +344,54 @@ nms.on('donePublish', async (id, StreamPath, args) => {
         }
 
         const tempFiles = fs.existsSync(tempDir) ? fs.readdirSync(tempDir) : [];
+        let tsFiles = [];
+
         tempFiles.forEach(file => {
-          if (file.endsWith('.m3u8')) {
-            return;
-          }
-
-          const tempFile = path.join(tempDir, file);
-          const destFile = path.join(destDir, file);
-
-          if (fs.existsSync(tempFile)) {
-            try {
-              fs.renameSync(tempFile, destFile);
-            } catch (error) {
-              console.error(`[Pinkker] [donePublish] Error al mover archivo ${tempFile} a ${destFile}:`, error);
-            }
-          } else {
-            console.error(`[Pinkker] [donePublish] El archivo ${tempFile} no existe.`);
+          if (file.endsWith('.ts')) {
+            tsFiles.push(path.join(tempDir, file));  // Almacena todos los archivos .ts
           }
         });
 
-        console.log(`[Pinkker] [donePublish] Transmisión movida a ${destDir} con la clave ${res.data.data}`);
+        // Si hay archivos .ts, concatenarlos y luego convertirlos a .mp4
+        if (tsFiles.length > 0) {
+          // Concatenar los archivos .ts en un solo archivo
+          const concatenatedTsFile = path.join(tempDir, 'concatenated.ts');
+          const tsListFile = path.join(tempDir, 'ts-list.txt');
+
+          // Crear un archivo de lista para la concatenación
+          const tsListContent = tsFiles.map(tsFile => `file '${tsFile}'`).join('\n');
+          fs.writeFileSync(tsListFile, tsListContent);
+
+          // Usar FFmpeg para concatenar los archivos .ts en uno solo
+          exec(`ffmpeg -f concat -safe 0 -i ${tsListFile} -c copy ${concatenatedTsFile}`, (err, stdout, stderr) => {
+            if (err) {
+              console.error(`[Pinkker] Error al concatenar los archivos .ts:`, stderr);
+              return;
+            }
+
+            console.log(`[Pinkker] Archivos .ts concatenados a ${concatenatedTsFile}`);
+
+            // Ahora convertir el archivo concatenado .ts a .mp4
+            const mp4File = path.join(destDir, 'output.mp4');
+
+            ffmpeg(concatenatedTsFile)
+              .output(mp4File)
+              .videoCodec('libx264')  // Códec de video H.264
+              .size('1280x720')  // Reducción a 720p
+              .audioCodec('aac')  // Códec de audio AAC
+              .audioBitrate('128k')  // Bitrate de audio
+              .videoBitrate('1500k')  // Bitrate de video (ajústalo según el caso)
+              .on('end', () => {
+                console.log(`[Pinkker] [donePublish] Archivo convertido a ${mp4File}`);
+                fs.unlinkSync(concatenatedTsFile);  // Eliminar el archivo concatenado
+                fs.unlinkSync(tsListFile);  // Eliminar el archivo de lista
+              })
+              .on('error', (err) => {
+                console.error(`[Pinkker] Error al convertir archivo ${concatenatedTsFile} a ${mp4File}:`, err);
+              })
+              .run();
+          });
+        }
       } catch (error) {
         console.error('[Pinkker] [donePublish] Error al mover transmisión:', error);
       }
@@ -373,6 +401,7 @@ nms.on('donePublish', async (id, StreamPath, args) => {
       clearInterval(nms.getSession(id).user.interval);
     }
   }
+
   const directories = fs.readdirSync(liveDirClear, { withFileTypes: true })
     .filter(dirent => dirent.isDirectory())
     .map(dirent => path.join(liveDirClear, dirent.name));
@@ -391,7 +420,6 @@ nms.on('donePublish', async (id, StreamPath, args) => {
       const diffMinutes = Math.ceil(diffTime / (1000 * 60));
 
       // if (diffDays > 30) {
-
       //   fs.rmdir(dir, { recursive: true }, (err) => {
       //     if (err) {
       //       console.error(`[Pinkker] [donePublish] Error al eliminar el directorio ${dir}:`, err);
@@ -403,6 +431,8 @@ nms.on('donePublish', async (id, StreamPath, args) => {
     });
   });
 });
+
+
 async function getChunksFromFolder(folderPath) {
   try {
     const isFolderExists = await fs.promises.access(folderPath, fs.constants.F_OK)
@@ -596,66 +626,78 @@ app.get('/stream/:streamKey/:file', (req, res) => {
 });
 
 // consumir vods
-app.get('/stream/vod/:streamKey/index.m3u8', async (req, res) => {
-  const storageDir = path.join(__dirname, 'media', 'storage', 'live');
-  const streamKey = req.params.streamKey;
-  const vodFolder = path.join(storageDir, streamKey);
+// Ruta para generar y servir los archivos .ts a partir de un .mp4
+app.get('/stream/vod/:key/index.m3u8', (req, res) => {
+  const { key } = req.params;
+  const mp4Path = path.join(__dirname, 'media', 'storage', 'live', key, 'output.mp4');
+  const tempHLSDir = path.join(__dirname, 'media', 'storage', 'live', key, 'hls');
+  const m3u8Path = path.join(tempHLSDir, 'index.m3u8');
 
-  try {
-    const files = fs.readdirSync(vodFolder)
-      .filter(file => file.endsWith('.ts'))
-      .sort((a, b) => {
-        const aIndex = parseInt(a.replace('index', '').replace('.ts', ''), 10);
-        const bIndex = parseInt(b.replace('index', '').replace('.ts', ''), 10);
-        return aIndex - bIndex;
-      });
-
-    if (files.length > 0) {
-      const m3u8Content = [
-        '#EXTM3U',
-        '#EXT-X-VERSION:3',
-        '#EXT-X-ALLOW-CACHE:YES',
-        '#EXT-X-TARGETDURATION:10',
-        '#EXT-X-MEDIA-SEQUENCE:0'
-      ];
-
-      files.forEach(file => {
-        const duration = 10;
-        m3u8Content.push(`#EXTINF:${duration},`);
-        m3u8Content.push(`${file}`);
-      });
-
-      m3u8Content.push('#EXT-X-ENDLIST');
-
-      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-      res.send(m3u8Content.join('\n'));
-    } else {
-      res.status(404).send('VOD no encontrado.');
-    }
-  } catch (error) {
-    console.error('Error al generar el archivo .m3u8:', error);
-    res.status(500).send('Error interno al procesar la solicitud.');
+  // Verificar si el archivo MP4 existe
+  if (!fs.existsSync(mp4Path)) {
+    return res.status(404).send('Archivo MP4 no encontrado.');
   }
+
+  // Verificar si ya existe la lista de reproducción HLS
+  if (fs.existsSync(m3u8Path)) {
+    // Si ya existe, enviar el archivo .m3u8
+    return res.sendFile(m3u8Path);
+  }
+
+  // Crear directorio temporal para HLS
+  if (!fs.existsSync(tempHLSDir)) {
+    fs.mkdirSync(tempHLSDir, { recursive: true });
+  }
+
+  // Ejecutar FFmpeg para generar HLS
+  const ffmpeg = spawn('ffmpeg', [
+    '-i', mp4Path,
+    '-c:v', 'copy',    // Copiar video sin re-codificación
+    '-c:a', 'aac',     // Codificar el audio a AAC
+    '-f', 'hls',       // Formato HLS
+    '-hls_time', '10', // Duración de cada segmento en segundos
+    '-hls_list_size', '0',  // Mantener toda la lista de segmentos
+    '-hls_playlist_type', 'vod',  // Tipo VOD
+    '-hls_flags', 'independent_segments', // Segmentos independientes
+    m3u8Path // Guardar el índice M3U8
+  ]);
+
+  // Manejar errores de FFmpeg
+  ffmpeg.stderr.on('data', (data) => {
+    console.error(`FFmpeg error: ${data}`);
+  });
+
+  ffmpeg.on('close', (code) => {
+    if (code === 0) {
+      // Leer y enviar el archivo .m3u8 al cliente
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+      res.sendFile(m3u8Path);
+    } else {
+      res.status(500).send('Error al generar el archivo HLS');
+    }
+  });
 });
 
-app.get('/stream/vod/:streamKey/:file', (req, res) => {
-  const storageDir = path.join(__dirname, 'media', 'storage', 'live');
-  const streamKey = req.params.streamKey;
-  const file = req.params.file;
-  const filePath = path.join(storageDir, streamKey, file);
 
+// Ruta para servir los archivos .ts
+app.get('/stream/vod/:key/:file', (req, res) => {
+  const { key, file } = req.params;
+  const tempHLSDir = path.join(__dirname, 'media', 'storage', 'live', key, 'hls');
+  const filePath = path.join(tempHLSDir, file);
+
+  console.log(`Intentando servir el archivo: ${filePath}`);
+
+  // Verificar si el archivo .ts existe
   if (fs.existsSync(filePath)) {
-    if (file.endsWith('.m3u8')) {
-      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-    } else if (file.endsWith('.ts')) {
-      res.setHeader('Content-Type', 'video/MP2T');
-    }
+    res.setHeader('Content-Type', 'video/MP2T');
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);
   } else {
-    res.status(404).send('Archivo no encontrado');
+    console.error(`Archivo no encontrado: ${filePath}`);
+    res.status(404).send('Archivo .ts no encontrado');
   }
 });
+
 
 
 nms.run();
