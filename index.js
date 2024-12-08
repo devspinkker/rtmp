@@ -7,7 +7,8 @@ const app = express();
 const helpers = require('./helpers/helpers');
 const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
-ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
+const ffmpegPath = process.env.FFMPEG_PATH;
+ffmpeg.setFfmpegPath(ffmpegPath);
 
 const { getUserByKey, AverageViewers, GetUserBanInstream } = require("./controllers/userCtrl");
 const useExtractor = require("./middlewares/auth.middleware")
@@ -42,12 +43,12 @@ const config = {
         app: "live",
         hls: true,
         hlsFlags: "[hls_time=1:hls_list_size=10]",
-        hlsKeep: true,
+        hlsKeep: false,
         vc: "libx264",
         h264_profile: "main",
         h264_level: "4.1",
         hls_wait_keyframe: true,
-        dashKeep: true,
+        dashKeep: false,
         vf: "60", // fps
         gop: "120",
         flags: "-b:v 6000k",
@@ -56,13 +57,13 @@ const config = {
         app: "live",
         hls: true,
         hlsFlags: "[hls_time=1:hls_list_size=10]",
-        hlsKeep: true,
+        hlsKeep: false,
         vc: "h264_nvenc",
         h264_profile: "main",
         h264_level: "4.1",
         gpu: 0,
         hls_wait_keyframe: true,
-        dashKeep: true,
+        dashKeep: false,
         vf: "60", // fps
         gop: "120",
         flags: "-b:v 6000k",
@@ -71,7 +72,7 @@ const config = {
         app: "live",
         hls: true,
         hlsFlags: "[hls_time=1:hls_list_size=10]",
-        hlsKeep: true,
+        hlsKeep: false,
         vc: "hevc_nvenc",
         hevc_profile: "main",
         hevc_level: "4.1",
@@ -79,7 +80,7 @@ const config = {
         hls_wait_keyframe: true,
         vf: "60", // fps
         gop: "120",
-        dashKeep: true,
+        dashKeep: false,
         flags: "-b:v 6000k",
       },
     ],
@@ -250,9 +251,47 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
     if (!fs.existsSync(mediaFolder)) {
       fs.mkdirSync(mediaFolder, { recursive: true });
     }
-    // Actualizar estado del usuario y comenzar la transmisión
     let date = new Date().getTime();
-    await updateOnline(user.keyTransmission, true);
+    // Actualizar estado del usuario y comenzar la transmisión
+    // almacenar mp4
+    const resUpdateOnline = await updateOnline(user.keyTransmission, true);
+    const destDir = path.join(__dirname, 'media', 'storage', 'live', resUpdateOnline.data.data);
+
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+
+    // Generar el archivo .mp4 durante la transmisión
+    const mp4OutputPath = path.join(destDir, 'stream.mp4');
+
+    console.log(`[Pinkker] [PrePublish] Comenzando a grabar el stream en ${mp4OutputPath}`);
+
+    const ffmpegProcess = spawn(ffmpegPath, [
+      '-i', `rtmp://127.0.0.1:1935/live/${totalKey}`,
+      '-c:v', 'copy',
+      '-c:a', 'aac',
+      '-b:a', '128k',
+      '-preset', 'ultrafast',
+      '-threads', '1',
+      '-f', 'mp4',
+      mp4OutputPath
+    ]);
+
+    ffmpegProcess.stderr.on('data', (data) => {
+      console.log(`[FFmpeg] ${data}`);
+    });
+
+    ffmpegProcess.on('close', (code) => {
+      console.log(`[Pinkker] [PrePublish] FFmpeg finalizado con código: ${code}`);
+    });
+
+    session.user = {
+      ffmpegProcess, // Guarda el proceso para poder matarlo luego
+    };
+
+
+
+    // iniciar stream
     await updateTimeStart(user.keyTransmission, date);
     console.log(`[Pinkker] [PrePublish] Inicio del Stream para ${user.NameUser} con la clave ${user.keyTransmission}`);
 
@@ -285,6 +324,84 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   }
 });
 
+const convertTsToMp4InFolder = async (dir) => {
+  const tsFiles = [];
+
+  // Verificar si la carpeta existe y leer los archivos
+  if (fs.existsSync(dir)) {
+    const files = fs.readdirSync(dir);
+
+    // Buscar todos los archivos .ts en la carpeta
+    files.forEach(file => {
+      if (file.endsWith('.ts') && file !== 'concatenated.ts') {
+        tsFiles.push(path.join(dir, file));
+      }
+    });
+
+    if (tsFiles.length > 0) {
+      const tsListFile = path.join(dir, 'ts-list.txt');
+      const concatenatedTsFile = path.join(dir, 'concatenated.ts');
+      const mp4File = path.join(dir, 'output.mp4'); // Nombre fijo para el archivo .mp4
+
+      // Eliminar todos los archivos .mp4 existentes en la carpeta
+      const mp4Files = files.filter(file => file.endsWith('.mp4'));
+      mp4Files.forEach(mp4 => {
+        fs.unlinkSync(path.join(dir, mp4)); // Eliminar cada archivo .mp4 encontrado
+      });
+
+      // Crear un archivo de lista para concatenar los .ts
+      const tsListContent = tsFiles.map(tsFile => `file '${tsFile}'`).join('\n');
+      fs.writeFileSync(tsListFile, tsListContent);
+
+      // Usar FFmpeg para concatenar y convertir a .mp4 directamente
+      exec(
+        `ffmpeg -f concat -safe 0 -i ${tsListFile} -c:v copy -c:a copy -y ${mp4File}`, // No recodifica
+        (err, stdout, stderr) => {
+          if (err) {
+            console.error(`[Pinkker] Error al convertir los archivos .ts en ${dir} a .mp4:`, stderr);
+            return;
+          }
+
+          console.log(`[Pinkker] Archivo .mp4 generado exitosamente: ${mp4File}`);
+
+          // Eliminar los archivos temporales y .ts
+          try {
+            tsFiles.forEach(tsFile => fs.unlinkSync(tsFile)); // Eliminar cada archivo .ts
+            fs.unlinkSync(tsListFile); // Eliminar el archivo de lista
+            if (fs.existsSync(concatenatedTsFile)) {
+              fs.unlinkSync(concatenatedTsFile); // Eliminar el archivo concatenado si existe
+            }
+            console.log(`[Pinkker] Archivos .ts y temporales eliminados en ${dir}.`);
+          } catch (deleteError) {
+            console.error(`[Pinkker] Error al eliminar archivos temporales en ${dir}:`, deleteError);
+          }
+        }
+      );
+
+    }
+  }
+};
+
+
+const convertAllTsToMp4InAllFolders = async () => {
+  const liveDirClear = path.join(__dirname, 'media', 'storage', 'live2');
+
+  // Obtener las primeras 3 carpetas en storage/live
+  const directories = fs.readdirSync(liveDirClear, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory())
+    .map(dirent => path.join(liveDirClear, dirent.name))
+    .slice(0, 3); // Limitar a las primeras 3 carpetas para pruebas
+
+  // Iterar sobre todas las carpetas y convertir los archivos .ts a .mp4 en cada una
+  for (const dir of directories) {
+    console.log(`[Pinkker] Procesando carpeta: ${dir}`);
+    await convertTsToMp4InFolder(dir);
+  }
+
+  console.log('[Pinkker] Conversión de todas las carpetas completada.');
+};
+
+// Ejecutar la conversión al principio del flujo de trabajo
 nms.on('donePublish', async (id, StreamPath, args) => {
   let totalKey;
 
@@ -299,35 +416,8 @@ nms.on('donePublish', async (id, StreamPath, args) => {
     return;
   }
 
-  const sourceDir = path.join(__dirname, 'media', 'live', totalKey);
-  const tempDir = path.join(__dirname, 'media', 'temp', totalKey);
-  const liveDirClear = path.join(__dirname, 'media', "storage", 'live');
-
-  const files = fs.existsSync(sourceDir) ? fs.readdirSync(sourceDir) : [];
-
-  console.log(`[Pinkker] [donePublish] Archivos en ${sourceDir}:`, files);
-
-  if (!fs.existsSync(tempDir)) {
-    fs.mkdirSync(tempDir, { recursive: true });
-  }
-
-  // Mover los archivos .ts a la carpeta temporal
-  files.forEach(file => {
-    const sourceFile = path.join(sourceDir, file);
-    const tempFile = path.join(tempDir, file);
-
-    if (fs.existsSync(sourceFile)) {
-      console.log(`[Debug] Moviendo archivo ${sourceFile} a ${tempFile}`);
-      try {
-        fs.renameSync(sourceFile, tempFile);
-        console.log(`[Pinkker] [donePublish] Archivo movido de ${sourceFile} a ${tempFile}`);
-      } catch (error) {
-        console.error(`[Pinkker] [donePublish] Error al mover archivo ${sourceFile} a ${tempFile}:`, error);
-      }
-    } else {
-      console.error(`[Pinkker] [donePublish] El archivo ${sourceFile} no existe.`);
-    }
-  });
+  // Llamada a la función que convierte los archivos .ts en todas las carpetas
+  await convertAllTsToMp4InAllFolders();
 
   const user = await getUserByKey(key);
 
@@ -335,101 +425,39 @@ nms.on('donePublish', async (id, StreamPath, args) => {
     const res = await updateOnline(user.keyTransmission, false);
 
     console.log(`[Pinkker] [donePublish] Stream apagado con la clave ${totalKey}`);
-    if (res.data.data) {
-      const destDir = path.join(__dirname, 'media', 'storage', 'live', res.data.data);
 
-      try {
-        if (!fs.existsSync(destDir)) {
-          fs.mkdirSync(destDir, { recursive: true });
-        }
-
-        const tempFiles = fs.existsSync(tempDir) ? fs.readdirSync(tempDir) : [];
-        let tsFiles = [];
-
-        tempFiles.forEach(file => {
-          if (file.endsWith('.ts')) {
-            tsFiles.push(path.join(tempDir, file));  // Almacena todos los archivos .ts
-          }
-        });
-
-        // Si hay archivos .ts, concatenarlos y luego convertirlos a .mp4
-        if (tsFiles.length > 0) {
-          // Concatenar los archivos .ts en un solo archivo
-          const concatenatedTsFile = path.join(tempDir, 'concatenated.ts');
-          const tsListFile = path.join(tempDir, 'ts-list.txt');
-
-          // Crear un archivo de lista para la concatenación
-          const tsListContent = tsFiles.map(tsFile => `file '${tsFile}'`).join('\n');
-          fs.writeFileSync(tsListFile, tsListContent);
-
-          // Usar FFmpeg para concatenar los archivos .ts en uno solo
-          exec(`ffmpeg -f concat -safe 0 -i ${tsListFile} -c copy ${concatenatedTsFile}`, (err, stdout, stderr) => {
-            if (err) {
-              console.error(`[Pinkker] Error al concatenar los archivos .ts:`, stderr);
-              return;
-            }
-
-            console.log(`[Pinkker] Archivos .ts concatenados a ${concatenatedTsFile}`);
-
-            // Ahora convertir el archivo concatenado .ts a .mp4
-            const mp4File = path.join(destDir, 'output.mp4');
-
-            ffmpeg(concatenatedTsFile)
-              .output(mp4File)
-              .videoCodec('libx264')  // Códec de video H.264
-              .size('1280x720')  // Reducción a 720p
-              .audioCodec('aac')  // Códec de audio AAC
-              .audioBitrate('128k')  // Bitrate de audio
-              .videoBitrate('1500k')  // Bitrate de video (ajústalo según el caso)
-              .on('end', () => {
-                console.log(`[Pinkker] [donePublish] Archivo convertido a ${mp4File}`);
-                fs.unlinkSync(concatenatedTsFile);  // Eliminar el archivo concatenado
-                fs.unlinkSync(tsListFile);  // Eliminar el archivo de lista
-              })
-              .on('error', (err) => {
-                console.error(`[Pinkker] Error al convertir archivo ${concatenatedTsFile} a ${mp4File}:`, err);
-              })
-              .run();
-          });
-        }
-      } catch (error) {
-        console.error('[Pinkker] [donePublish] Error al mover transmisión:', error);
-      }
-    }
-
-    if (id && nms.getSession(id) && nms.getSession(id).user && nms.getSession(id).user.interval) {
-      clearInterval(nms.getSession(id).user.interval);
+    if (id && nms.getSession(id) && nms.getSession(id).publisher) {
+      nms.getSession(id).publisher.stop();
     }
   }
+  const session = nms.getSession(id);
+  if (session) {
+    const user = session.user;
 
-  const directories = fs.readdirSync(liveDirClear, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .map(dirent => path.join(liveDirClear, dirent.name));
+    // Detener el proceso de FFmpeg si está grabando el stream
+    if (user && user.ffmpegProcess) {
+      const ffmpegProcess = user.ffmpegProcess;
+      ffmpegProcess.kill();  // Terminar el proceso de FFmpeg
+      console.log(`[Pinkker] [donePublish] FFmpeg detenido`);
+    }
 
-  directories.forEach(dir => {
-    fs.stat(dir, (err, stats) => {
-      if (err) {
-        console.error(`[Pinkker] [donePublish] Error al obtener estadísticas del directorio ${dir}:`, err);
-        return;
-      }
+    // Eliminar los intervalos de actualización de miniaturas y promedio de espectadores
+    if (user && user.interval) {
+      clearInterval(user.interval);
+      clearInterval(user.secondInterval);
+      console.log(`[Pinkker] [donePublish] Intervalos de actualización detenidos`);
+    }
 
-      const creationTime = new Date(stats.birthtime);
-      const now = new Date();
-      const diffTime = Math.abs(now - creationTime);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      const diffMinutes = Math.ceil(diffTime / (1000 * 60));
+    // Eliminar la carpeta de medios generada durante el stream (si es necesario)
+    const mediaFolder = path.join(__dirname, 'media', 'live', user.keyTransmission);
+    if (fs.existsSync(mediaFolder)) {
+      fs.rmdirSync(mediaFolder, { recursive: true });
+      console.log(`[Pinkker] [donePublish] Archivos de transmisión eliminados`);
+    }
 
-      // if (diffDays > 30) {
-      //   fs.rmdir(dir, { recursive: true }, (err) => {
-      //     if (err) {
-      //       console.error(`[Pinkker] [donePublish] Error al eliminar el directorio ${dir}:`, err);
-      //     } else {
-      //       console.log(`[Pinkker] [donePublish] Directorio eliminado ${dir} porque tenía más de 30 días`);
-      //     }
-      //   });
-      // }
-    });
-  });
+    // Limpiar la sesión del usuario
+    session.user = null;  // Limpiar cualquier referencia de usuario
+  }
 });
 
 
@@ -629,7 +657,7 @@ app.get('/stream/:streamKey/:file', (req, res) => {
 // Ruta para generar y servir los archivos .ts a partir de un .mp4
 app.get('/stream/vod/:key/index.m3u8', (req, res) => {
   const { key } = req.params;
-  const mp4Path = path.join(__dirname, 'media', 'storage', 'live', key, 'output.mp4');
+  const mp4Path = path.join(__dirname, 'media', 'storage', 'live', key, 'stream.mp4');
   const tempHLSDir = path.join(__dirname, 'media', 'storage', 'live', key, 'hls');
   const m3u8Path = path.join(tempHLSDir, 'index.m3u8');
 
