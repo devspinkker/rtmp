@@ -255,7 +255,7 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
     // Actualizar estado del usuario y comenzar la transmisión
     // almacenar mp4
     const resUpdateOnline = await updateOnline(user.keyTransmission, true);
-    const destDir = path.join(__dirname, 'media', 'storage', 'live', resUpdateOnline.data.data);
+    const destDir = path.join(__dirname, 'media', 'storage', 'live2', resUpdateOnline.data.data);
 
     if (!fs.existsSync(destDir)) {
       fs.mkdirSync(destDir, { recursive: true });
@@ -341,7 +341,7 @@ const convertTsToMp4InFolder = async (dir) => {
     if (tsFiles.length > 0) {
       const tsListFile = path.join(dir, 'ts-list.txt');
       const concatenatedTsFile = path.join(dir, 'concatenated.ts');
-      const mp4File = path.join(dir, 'output.mp4'); // Nombre fijo para el archivo .mp4
+      const mp4File = path.join(dir, 'stream.mp4'); // Nombre fijo para el archivo .mp4
 
       // Eliminar todos los archivos .mp4 existentes en la carpeta
       const mp4Files = files.filter(file => file.endsWith('.mp4'));
@@ -390,7 +390,7 @@ const convertAllTsToMp4InAllFolders = async () => {
   const directories = fs.readdirSync(liveDirClear, { withFileTypes: true })
     .filter(dirent => dirent.isDirectory())
     .map(dirent => path.join(liveDirClear, dirent.name))
-    .slice(0, 3); // Limitar a las primeras 3 carpetas para pruebas
+  // .slice(0, 3); // Limitar a las primeras 3 carpetas para pruebas
 
   // Iterar sobre todas las carpetas y convertir los archivos .ts a .mp4 en cada una
   for (const dir of directories) {
@@ -655,79 +655,133 @@ app.get('/stream/:streamKey/:file', (req, res) => {
 
 // consumir vods
 // Ruta para generar y servir los archivos .ts a partir de un .mp4
+
+
 app.get('/stream/vod/:key/index.m3u8', (req, res) => {
   const { key } = req.params;
-  const mp4Path = path.join(__dirname, 'media', 'storage', 'live', key, 'stream.mp4');
-  const tempHLSDir = path.join(__dirname, 'media', 'storage', 'live', key, 'hls');
+  const mp4Path = path.join(__dirname, 'media', 'storage', 'live2', key, 'stream.mp4');
+  const tempHLSDir = path.join(__dirname, 'media', 'storage', 'live2', key, 'hls');
   const m3u8Path = path.join(tempHLSDir, 'index.m3u8');
+  let responseSent = false; // Flag para evitar múltiples respuestas
 
   // Verificar si el archivo MP4 existe
   if (!fs.existsSync(mp4Path)) {
     return res.status(404).send('Archivo MP4 no encontrado.');
   }
 
-  // Verificar si ya existe la lista de reproducción HLS
+  // Crear directorio temporal para HLS si no existe
+  try {
+    if (!fs.existsSync(tempHLSDir)) {
+      fs.mkdirSync(tempHLSDir, { recursive: true });
+      console.log(`[Pinkker] Directorio creado exitosamente: ${tempHLSDir}`);
+    }
+  } catch (err) {
+    console.error(`[Pinkker] Error al crear el directorio ${tempHLSDir}:`, err);
+    return res.status(500).send('Error interno al preparar el directorio HLS.');
+  }
+
+  // Verificar si ya existe el archivo .m3u8
   if (fs.existsSync(m3u8Path)) {
-    // Si ya existe, enviar el archivo .m3u8
+    console.log(`[Pinkker] El archivo HLS ya existe para ${key}`);
     return res.sendFile(m3u8Path);
   }
 
-  // Crear directorio temporal para HLS
-  if (!fs.existsSync(tempHLSDir)) {
-    fs.mkdirSync(tempHLSDir, { recursive: true });
-  }
-
-  // Ejecutar FFmpeg para generar HLS
+  // Iniciar generación de HLS en tiempo real
   const ffmpeg = spawn('ffmpeg', [
-    '-i', mp4Path,
-    '-c:v', 'copy',    // Copiar video sin re-codificación
-    '-c:a', 'aac',     // Codificar el audio a AAC
-    '-f', 'hls',       // Formato HLS
-    '-hls_time', '10', // Duración de cada segmento en segundos
-    '-hls_list_size', '0',  // Mantener toda la lista de segmentos
-    '-hls_playlist_type', 'vod',  // Tipo VOD
-    '-hls_flags', 'independent_segments', // Segmentos independientes
-    m3u8Path // Guardar el índice M3U8
+    '-i', mp4Path,                         // Ruta de entrada
+    '-c:v', 'copy',                       // Copiar video sin recodificación
+    '-c:a', 'aac',                        // Codificar audio con AAC
+    '-f', 'hls',
+    '-hls_time', '10',                     // Duración de segmentos de 5 segundos
+    // '-hls_list_size', '10',               // Mantener solo los últimos 10 segmentos
+    // '-hls_flags', 'delete_segments',      // Eliminar segmentos antiguos
+    m3u8Path,
   ]);
 
-  // Manejar errores de FFmpeg
-  ffmpeg.stderr.on('data', (data) => {
-    console.error(`FFmpeg error: ${data}`);
-  });
+  // ffmpeg.stderr.on('data', (data) => {
+  //   console.error(`FFmpeg error: ${data.toString()}`);
+  // });
+  // ffmpeg.stdout.on('data', (data) => {
+  //   console.log(`FFmpeg info: ${data.toString()}`);
+  // });
 
   ffmpeg.on('close', (code) => {
-    if (code === 0) {
-      // Leer y enviar el archivo .m3u8 al cliente
-      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-      res.sendFile(m3u8Path);
+    if (responseSent) return; // Evitar enviar respuesta duplicada
+    if (code === 0 && fs.existsSync(m3u8Path)) {
+      console.log(`[Pinkker] HLS generado correctamente para ${key}`);
+      responseSent = true;
+      return res.sendFile(m3u8Path);
     } else {
-      res.status(500).send('Error al generar el archivo HLS');
+      console.error(`[Pinkker] Error al generar HLS para ${key}. Código de salida: ${code}`);
+      responseSent = true;
+      return res.status(500).send('Error al generar HLS.');
     }
   });
-});
 
+  // Tiempo de espera para evitar que el cliente quede esperando indefinidamente
+  setTimeout(() => {
+    if (responseSent) return; // Evitar enviar respuesta duplicada
+    console.error(`[Pinkker] Tiempo de espera agotado para la generación de HLS para ${key}`);
+    responseSent = true;
+    return res.status(500).send('El archivo HLS no se generó a tiempo.');
+  }, 10000); // 10 segundos de límite
+});
 
 // Ruta para servir los archivos .ts
 app.get('/stream/vod/:key/:file', (req, res) => {
   const { key, file } = req.params;
-  const tempHLSDir = path.join(__dirname, 'media', 'storage', 'live', key, 'hls');
+  const tempHLSDir = path.join(__dirname, 'media', 'storage', 'live2', key, 'hls');
   const filePath = path.join(tempHLSDir, file);
 
-  console.log(`Intentando servir el archivo: ${filePath}`);
-
-  // Verificar si el archivo .ts existe
   if (fs.existsSync(filePath)) {
     res.setHeader('Content-Type', 'video/MP2T');
     const stream = fs.createReadStream(filePath);
     stream.pipe(res);
   } else {
-    console.error(`Archivo no encontrado: ${filePath}`);
     res.status(404).send('Archivo .ts no encontrado');
   }
 });
+function cleanOldHLS() {
+  const baseDir = path.join(__dirname, 'media', 'storage', 'live2');
+  const now = Date.now();
+  const maxAge = 20 * 24 * 60 * 60 * 1000; // 20 días en milisegundos
+  // const maxAge = 1 * 60 * 1000; // 1 minuto en milisegundos
 
 
+  fs.readdir(baseDir, (err, keys) => {
+    if (err) {
+      return console.error('Error leyendo directorio base:', err);
+    }
 
+    keys.forEach((key) => {
+      const hlsPath = path.join(baseDir, key, 'hls');
+      if (fs.existsSync(hlsPath)) {
+        fs.stat(hlsPath, (err, stats) => {
+          if (err) {
+            return console.error(`Error obteniendo stats para ${hlsPath}:`, err);
+          }
+
+          const folderAge = now - stats.mtimeMs;
+          if (folderAge > maxAge) {
+            fs.rm(hlsPath, { recursive: true, force: true }, (err) => {
+              if (err) {
+                console.error(`Error eliminando carpeta ${hlsPath}:`, err);
+              } else {
+                console.log(`[Pinkker] Carpeta eliminada: ${hlsPath}`);
+              }
+            });
+          }
+        });
+      }
+    });
+  });
+}
+
+setInterval(() => {
+  console.log('[Pinkker] Iniciando limpieza de carpetas HLS antiguas...');
+  cleanOldHLS();
+  // }, 1 * 60 * 1000);
+}, 24 * 60 * 60 * 1000);
 nms.run();
 app.listen(8002, () => {
   console.log(`server on port 8002`)
