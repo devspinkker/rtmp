@@ -39,15 +39,27 @@ async function createVod(url, stream_key) {
     }
 }
 
+const BASE_UPLOAD_PATH = process.env.BASE_UPLOAD_PATH
+
 const generateStreamThumbnail = async (key, cmt) => {
     setTimeout(async () => {
         const stream_key = key.substring(4, key.length);
 
-        const thumbnailFilename = stream_key + '.png';
-        const thumbnailPath = path.join(__dirname, thumbnailFilename);
+        // Crear un nombre basado en `cmt` y la fecha actual
+        const timestamp = Date.now(); // Marca de tiempo en milisegundos
+        const randomFilename = `${timestamp}.png`;
+
+        // Crear la ruta completa para guardar la miniatura
+        const folderPath = path.join(BASE_UPLOAD_PATH,);
+        if (!fs.existsSync(folderPath)) {
+            fs.mkdirSync(folderPath, { recursive: true });
+        }
+
+        const thumbnailPath = path.join(folderPath, randomFilename);
+
         const args = [
             '-y',
-            '-i', process.env.LIVE_URL + '/live/' + stream_key + '.flv',
+            '-i', `${process.env.LIVE_URL}/live/${stream_key}.flv`,
             '-ss', '00:00:05',
             '-s', '1920x1080',
             '-vframes', '1',
@@ -56,31 +68,31 @@ const generateStreamThumbnail = async (key, cmt) => {
         ];
 
         try {
-            await spawn(cmd, args, {
+            // Ejecutar FFmpeg para generar la miniatura
+            await spawn('ffmpeg', args, {
                 detached: true,
                 stdio: 'ignore'
             }).unref();
+
             setTimeout(async () => {
-
-
-                let result;
                 try {
-                    result = await cloudinary.uploader.upload(thumbnailPath);
-                    if (result && result.url) {
-                        await updateThumbnail(result.url, cmt);
-                        try {
-                            fs.unlinkSync(thumbnailPath);
-                        } catch (unlinkError) {
-                        }
-                    }
-                } catch (cloudinaryError) {
+                    const thumbnailUrl = `${process.env.MediaBaseURL}/${randomFilename}`;
+
+                    // Actualizar miniatura con la URL
+                    await updateThumbnail(thumbnailUrl, cmt);
+
+                    // Eliminar el archivo local después de procesarlo (opcional)
+                    fs.unlinkSync(thumbnailPath);
+                    console.log(`Miniatura procesada y eliminada: ${thumbnailPath}`);
+                } catch (error) {
+                    console.error('Error al actualizar la miniatura o eliminar el archivo:', error);
                 }
-            }, 10000)
+            }, 10000);
         } catch (error) {
+            console.error('Error al generar la miniatura:', error);
         }
     }, 30000);
 };
-
 
 const uploadStream = async (file_name, stream_key) => {
     const filePath = process.env.MEDIA_FOLDER + stream_key + "/" + file_name;

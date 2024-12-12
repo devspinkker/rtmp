@@ -235,7 +235,6 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   // }
 
   // por ahora asi tiene que estar
-  console.log(user)
   if (user.NameUser) {
 
     if ((!user.Partner.active && streamingsOnline.data >= 5) || (user.Partner.active && streamingsOnline.data >= 10)) {
@@ -417,7 +416,7 @@ nms.on('donePublish', async (id, StreamPath, args) => {
   }
 
   // Llamada a la función que convierte los archivos .ts en todas las carpetas
-  await convertAllTsToMp4InAllFolders();
+  // await convertAllTsToMp4InAllFolders();
 
   const user = await getUserByKey(key);
 
@@ -688,13 +687,13 @@ app.get('/stream/vod/:key/index.m3u8', (req, res) => {
 
   // Iniciar generación de HLS en tiempo real
   const ffmpeg = spawn('ffmpeg', [
-    '-i', mp4Path,                         // Ruta de entrada
+    '-i', mp4Path,                        // Ruta de entrada
     '-c:v', 'copy',                       // Copiar video sin recodificación
     '-c:a', 'aac',                        // Codificar audio con AAC
-    '-f', 'hls',
-    '-hls_time', '10',                     // Duración de segmentos de 5 segundos
-    // '-hls_list_size', '10',               // Mantener solo los últimos 10 segmentos
-    // '-hls_flags', 'delete_segments',      // Eliminar segmentos antiguos
+    '-f', 'hls',                          // Formato de salida HLS
+    '-hls_time', '10',                    // Duración de segmentos (10 segundos)
+    '-hls_list_size', '0',                // Incluir todos los segmentos
+    '-hls_flags', 'independent_segments', // Mantener segmentos independientes
     m3u8Path,
   ]);
 
@@ -710,13 +709,14 @@ app.get('/stream/vod/:key/index.m3u8', (req, res) => {
     if (code === 0 && fs.existsSync(m3u8Path)) {
       console.log(`[Pinkker] HLS generado correctamente para ${key}`);
       responseSent = true;
-      return res.sendFile(m3u8Path);
+      return res.sendFile(m3u8Path); // Enviar el archivo completo al cliente
     } else {
       console.error(`[Pinkker] Error al generar HLS para ${key}. Código de salida: ${code}`);
       responseSent = true;
       return res.status(500).send('Error al generar HLS.');
     }
   });
+
 
   // Tiempo de espera para evitar que el cliente quede esperando indefinidamente
   setTimeout(() => {
