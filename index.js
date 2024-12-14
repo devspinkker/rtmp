@@ -744,7 +744,7 @@ app.get('/stream/vod/:key/:file', (req, res) => {
 function cleanOldHLS() {
   const baseDir = path.join(__dirname, 'media', 'storage', 'live2');
   const now = Date.now();
-  const maxAge = 20 * 24 * 60 * 60 * 1000; // 20 días en milisegundos
+  const maxAge = 6 * 24 * 60 * 60 * 1000; // 20 días en milisegundos
   // const maxAge = 1 * 60 * 1000; // 1 minuto en milisegundos
 
 

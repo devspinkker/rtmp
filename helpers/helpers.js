@@ -75,21 +75,19 @@ const generateStreamThumbnail = async (key, cmt) => {
             }).unref();
 
             setTimeout(async () => {
+                const thumbnailUrl = `${process.env.MediaBaseURL}/${randomFilename}`;
                 try {
-                    const thumbnailUrl = `${process.env.MediaBaseURL}/${randomFilename}`;
 
                     // Actualizar miniatura con la URL
                     await updateThumbnail(thumbnailUrl, cmt);
 
-                    // Eliminar el archivo local después de procesarlo (opcional)
-                    fs.unlinkSync(thumbnailPath);
-                    console.log(`Miniatura procesada y eliminada: ${thumbnailPath}`);
                 } catch (error) {
                     console.error('Error al actualizar la miniatura o eliminar el archivo:', error);
                 }
             }, 10000);
         } catch (error) {
-            console.error('Error al generar la miniatura:', error);
+            fs.unlinkSync(thumbnailPath);
+            console.error('Error al generar la miniatura: Eliminada');
         }
     }, 30000);
 };
