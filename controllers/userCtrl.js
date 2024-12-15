@@ -34,7 +34,7 @@ async function getUserByCmt(Cmt) {
         return error
     }
 }
-export async function getStreamByUserName(userName) {
+async function getStreamByUserName(userName) {
     try {
         const response = await axios.get(`${baseURL}/stream/getStreamByNameUser?Streamer=${userName}`)
         return response.data
