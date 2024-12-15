@@ -163,6 +163,49 @@ async function getStreamingsOnline() {
 
 
 
+nms.on('preRequest', async (req, res) => {
+  // Obtener el streamKey desde la URL
+  const streamKey = req.url.split('/')[2]?.split('.')[0]; // Extrae el streamKey del URL
+  const streamPath = `/live/${streamKey}`; // Construir el StreamPath
+  const session = nms.getSessionByStreamPath(streamPath); // Obtener la sesión por StreamPath
+
+  if (!session) {
+    res.statusCode = 404;
+    res.end('Stream no encontrado.');
+    return;
+  }
+
+  console.log(`[Middleware] Verificando autorización para el stream: ${streamPath}`);
+
+  // Verificar si el stream requiere autorización
+  if (session.user?.authorization) {
+    const token = req.query?.token; // Extraer token de la query string
+    if (!token) {
+      res.statusCode = 403;
+      res.end('Acceso denegado: Falta token.');
+      return;
+    }
+
+    const streamerId = session.user.streamerId; // Obtener el ID del streamer desde la sesión
+
+    try {
+      // Validar el token en el backend
+      const response = await helpers.validate_stream_access(token, streamerId);
+      if (!response.data || !response.data.valid) {
+        res.statusCode = 403;
+        res.end('Acceso denegado: Token inválido o sin autorización.');
+        return;
+      }
+    } catch (error) {
+      console.error(`[Middleware] Error al validar token: ${error.message}`);
+      res.statusCode = 500;
+      res.end('Error interno del servidor.');
+      return;
+    }
+  }
+
+  // Continuar si no se requiere autorización o si la validación fue exitosa
+});
 
 
 nms.on('preConnect', (id, args) => {
@@ -287,38 +330,6 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
 });
 
 
-// Ejecutar la conversión al principio del flujo de trabajo
-app.use('/media', async (req, res, next) => {
-  const streamKey = req.path.split('/')[2]; // Obtener clave del stream desde la ruta
-  const streamPath = `/live/${streamKey}`; // Definir el StreamPath en el formato esperado
-  const session = nms.getSessionByStreamPath(streamPath); // Obtener la sesión del stream
-
-  if (!session) {
-    return res.status(404).send('Stream no encontrado.');
-  }
-
-  console.log(`[Middleware] Verificando autorización para el stream: ${streamPath}`);
-
-  if (session.user?.authorization) {
-    if (!req.query.token) {
-      return res.status(403).send('Acceso denegado: Falta token.');
-    }
-
-    const streamerId = session.user.streamerId; // Obtener el ID del streamer desde la sesión
-
-    try {
-      const response = await helpers.validate_stream_access(req.query.token, streamerId);
-      if (!response.data || !response.data.valid) {
-        return res.status(403).send('Acceso denegado: Token inválido o sin autorización.');
-      }
-    } catch (error) {
-      console.error(`[Middleware] Error al validar token: ${error.message}`);
-      return res.status(500).send('Error interno del servidor.');
-    }
-  }
-
-  next(); // Continuar si no requiere autorización o si la validación fue exitosa
-});
 
 
 app.use(router);
