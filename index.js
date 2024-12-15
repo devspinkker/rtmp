@@ -9,6 +9,9 @@ const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = process.env.FFMPEG_PATH;
 ffmpeg.setFfmpegPath(ffmpegPath);
+const { router } = require('./routes/routes');
+
+var nms = new NodeMediaServer(config);
 
 const { getUserByKey, AverageViewers, GetUserBanInstream } = require("./controllers/userCtrl");
 const useExtractor = require("./middlewares/auth.middleware")
@@ -17,6 +20,35 @@ const spawn = require('child_process').spawn;
 const exec = require('child_process').exec;
 
 app.use(cors());
+app.use('/media', async (req, res, next) => {
+  const streamKey = req.path.split('/')[2]; // Obtener clave del stream desde la ruta
+  const authToken = req.query.token; // Token proporcionado por el cliente
+  const session = nms.getSessionByStreamPath(`/live/${streamKey}`); // Obtener sesión del stream
+
+  if (!session) {
+    return res.status(404).send('Stream no encontrado.');
+  }
+  console.log("paso algo")
+  // Verificar si el stream requiere autorización
+  if (session.user?.authorization) {
+    if (!authToken) {
+      return res.status(403).send('Acceso denegado: Falta token.');
+    }
+
+    // Validar token en el backend
+    try {
+      const response = await helpers.validate_stream_access(authToken)
+
+      if (!response.data || !response.data.valid) {
+        return res.status(403).send('Acceso denegado: Token inválido o sin autorización.');
+      }
+    } catch (error) {
+      return res.status(500).send('Error interno del servidor.');
+    }
+  }
+
+  next(); // Continuar si no requiere autorización o si la validación fue exitosa
+});
 
 const config = {
   rtmp: {
@@ -147,8 +179,6 @@ async function updateTimeStart({ keyTransmission, date }) {
   }
 }
 
-
-
 async function getStreamingsOnline() {
   try {
     const data = await axios.get(process.env.BACKEND_URL + `/stream/get_streamings_online`);
@@ -160,10 +190,8 @@ async function getStreamingsOnline() {
   }
 }
 
-const { router } = require('./routes/routes');
 
 
-var nms = new NodeMediaServer(config);
 
 
 nms.on('preConnect', (id, args) => {
@@ -232,13 +260,17 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       mp4OutputPath
     ]);
 
-    ffmpegProcess.stderr.on('data', (data) => {
-      console.log(`[FFmpeg] ${data}`);
-    });
+    // ffmpegProcess.stderr.on('data', (data) => {
+    //   console.log(`[FFmpeg] ${data}`);
+    // });
 
     ffmpegProcess.on('close', (code) => {
       console.log(`[Pinkker] [PrePublish] FFmpeg finalizado con código: ${code}`);
     });
+
+    // establecer que se necesita auth
+    const resgetStreamByUserName = await helpers.getStreamByUserName(user.NameUser)
+    console.log(resgetStreamByUserName);
 
     session.user = {
       ffmpegProcess, // Guarda el proceso para poder matarlo luego

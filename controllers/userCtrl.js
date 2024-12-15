@@ -34,7 +34,14 @@ async function getUserByCmt(Cmt) {
         return error
     }
 }
-
+export async function getStreamByUserName(userName) {
+    try {
+        const response = await axios.get(`${baseURL}/stream/getStreamByNameUser?Streamer=${userName}`)
+        return response.data
+    } catch (error) {
+        return error
+    }
+}
 async function updateOnline(id, online) {
     try {
         const res = await axios.post(`${url}/update_online/${id}`, { online })
@@ -44,4 +51,4 @@ async function updateOnline(id, online) {
     }
 }
 
-module.exports = { getUserByKey, updateOnline, getUserByCmt, AverageViewers, GetUserBanInstream }
+module.exports = { getUserByKey, updateOnline, getUserByCmt, AverageViewers, GetUserBanInstream, getStreamByUserName }

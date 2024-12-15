@@ -4,7 +4,7 @@ const cloudinary = require('cloudinary');
 const fs = require('fs');
 const axios = require("axios");
 const path = require('path');
-
+const baseURL = process.env.BACKEND_URL;
 const ffmpeg = require('fluent-ffmpeg');
 
 ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
@@ -197,12 +197,36 @@ async function getLastTsFiles(mediaFolder, maxFiles = 10) {
         throw new Error(`Error leyendo el archivo .m3u8: ${error.message}`);
     }
 }
-
+export async function getStreamByUserName(userName) {
+    try {
+        const response = await axios.get(`${baseURL}/stream/getStreamByNameUser?Streamer=${userName}`)
+        return response.data
+    } catch (error) {
+        return error
+    }
+}
+export async function validate_stream_access(token, idStreamer) {
+    try {
+        const response = await axios.get(
+            `${baseURL}/stream/getStreamByNameUser?idStreamer=${idStreamer}`,
+            {
+                headers: {
+                    Authorization: `Bearer ${token}`, // Enviar el token en el encabezado Authorization
+                },
+            }
+        );
+        return response.data;
+    } catch (error) {
+        console.error('Error en validate_stream_access:', error.message);
+        return error.response?.data || error;
+    }
+}
 module.exports = {
     generateStreamThumbnail: generateStreamThumbnail,
     uploadStream: uploadStream,
-    // usar
     cleanOldHLS: cleanOldHLS,
     generateM3u8Content: generateM3u8Content,
-    getLastTsFiles: getLastTsFiles
+    getLastTsFiles: getLastTsFiles,
+    getStreamByUserName,
+    validate_stream_access
 };

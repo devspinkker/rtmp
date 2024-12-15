@@ -47,7 +47,7 @@ function handleVodFile(req, res) {
 function handleVodIndexM3u8(req, res) {
     const { key } = req.params;
     const mp4Path = path.join(process.cwd(), 'media', 'storage', 'live2', key, 'stream.mp4');
-    const tempHLSDir = path.join(__dirname, 'media', 'storage', 'live2', key, 'hls');
+    const tempHLSDir = path.join(process.cwd(), 'media', 'storage', 'live2', key, 'hls');
     const m3u8Path = path.join(tempHLSDir, 'index.m3u8');
     let responseSent = false;
 
