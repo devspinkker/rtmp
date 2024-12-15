@@ -125,58 +125,84 @@ const uploadStream = async (file_name, stream_key) => {
 };
 
 
-function getNewestFile(files, path) {
 
-    var out = [];
-    var files = files.filter(function (file) {
-        return file.indexOf(".mp4") !== -1;
-    });
+function cleanOldHLS() {
+    const baseDir = path.join(__dirname, '../media', 'storage', 'live2');
+    const now = Date.now();
+    const maxAge = 6 * 24 * 60 * 60 * 1000; // 6 días en milisegundos
+    // const maxAge = 1 * 60 * 1000; // 1 minuto en milisegundos
 
-    files.forEach(function (file) {
-        var stats = fs.statSync(path + "/" + file);
-        if (stats.isFile()) {
-            out.push({ "file": file, "mtime": stats.mtime.getTime() });
-        }
-    });
-    out.sort(function (a, b) {
-        return b.mtime - a.mtime;
-    });
-    return (out.length > 0) ? out[0].file : "";
-}
 
-const removeTmp = (path) => {
-    fs.unlink(path, err => {
+    fs.readdir(baseDir, (err, keys) => {
         if (err) {
-            console.error('Error removing temporary file:', err.message);
+            return console.error('Error leyendo directorio base:', err);
         }
-    });
-};
 
-const uploadClipToCloudinary = async (filePath) => {
-    return new Promise((resolve, reject) => {
-        cloudinary.v2.uploader.upload(filePath, {
-            folder: 'clips',
-            resource_type: 'video',
-            format: 'mp4',
-            audio_codec: 'aac',
-            audio_bitrate: '128k',
-            audio_channels: 2,
-            audio_samplerate: 44100,
-            audio_volume: '-10dB'
-        }, (err, result) => {
-            if (err) {
-                console.error('Error uploading to Cloudinary:', err.message);
-                reject(new Error('Error uploading to Cloudinary: ' + err.message));
-            } else {
-                resolve(result.secure_url);
+        keys.forEach((key) => {
+            const hlsPath = path.join(baseDir, key, 'hls');
+            if (fs.existsSync(hlsPath)) {
+                fs.stat(hlsPath, (err, stats) => {
+                    if (err) {
+                        return console.error(`Error obteniendo stats para ${hlsPath}:`, err);
+                    }
+
+                    const folderAge = now - stats.mtimeMs;
+                    if (folderAge > maxAge) {
+                        fs.rm(hlsPath, { recursive: true, force: true }, (err) => {
+                            if (err) {
+                                console.error(`Error eliminando carpeta ${hlsPath}:`, err);
+                            } else {
+                                console.log(`[Pinkker] Carpeta eliminada: ${hlsPath}`);
+                            }
+                        });
+                    }
+                });
             }
         });
     });
 }
 
+// Función para generar el contenido de un archivo .m3u8  (clips)
+function generateM3u8Content(tsFiles, duration = 10) {
+    if (tsFiles.length === 0) {
+        throw new Error('No hay archivos .ts disponibles.');
+    }
+
+    const content = [
+        '#EXTM3U',
+        '#EXT-X-VERSION:3',
+        '#EXT-X-ALLOW-CACHE:YES',
+        '#EXT-X-TARGETDURATION:10',
+        '#EXT-X-MEDIA-SEQUENCE:0'
+    ];
+
+    tsFiles.forEach(file => {
+        content.push(`#EXTINF:${duration},`);
+        content.push(path.basename(file));
+    });
+
+    content.push('#EXT-X-ENDLIST');
+    return content.join('\n');
+}
+// Función para obtener los últimos archivos .ts de un archivo .m3u8 (clips)
+async function getLastTsFiles(mediaFolder, maxFiles = 10) {
+    try {
+        const m3u8Path = path.join(mediaFolder, 'index.m3u8');
+        const m3u8Content = await fs.promises.readFile(m3u8Path, 'utf8');
+        const lines = m3u8Content.split('\n');
+
+        const tsFiles = lines.filter(line => line.endsWith('.ts')).map(line => path.join(mediaFolder, line.trim()));
+        return tsFiles.slice(-maxFiles);
+    } catch (error) {
+        throw new Error(`Error leyendo el archivo .m3u8: ${error.message}`);
+    }
+}
 
 module.exports = {
     generateStreamThumbnail: generateStreamThumbnail,
     uploadStream: uploadStream,
-
+    // usar
+    cleanOldHLS: cleanOldHLS,
+    generateM3u8Content: generateM3u8Content,
+    getLastTsFiles: getLastTsFiles
 };

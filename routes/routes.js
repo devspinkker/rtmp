@@ -1,11 +1,20 @@
 const { Router } = require("express");
-const { vodStreamKey } = require("../controllers/Vods");
+const { handleVodFile, handleLiveFile, handleVodIndexM3u8, handleVodIndexM3u8live, handleVodIndexM3u8liveFiles } = require("../controllers/Vods");
 const { StreamStreamKey } = require("../controllers/GetClipsChunks");
 
 const router = Router();
 
-// router.get("/stream/:streamKey", StreamStreamKey);
-router.post("/vod/:streamKey", vodStreamKey);
+// clips
 
+// entregar index para los files 
+router.get('/stream/:streamKey/index.m3u8', handleVodIndexM3u8live);
+// files para los clips
+router.get('/stream/:streamKey/:file', handleVodIndexM3u8liveFiles);
+
+// vods
+// convertir el mp4 a .ts para los vods
+router.get('/stream/vod/:key/index.m3u8', handleVodIndexM3u8);
+// entregar los .ts en cuestion
+router.get("/stream/vod/:key/:file", handleVodFile);
 
 module.exports = { router }
