@@ -197,7 +197,7 @@ async function getLastTsFiles(mediaFolder, maxFiles = 10) {
         throw new Error(`Error leyendo el archivo .m3u8: ${error.message}`);
     }
 }
-export async function getStreamByUserName(userName) {
+async function getStreamByUserName(userName) {
     try {
         const response = await axios.get(`${baseURL}/stream/getStreamByNameUser?Streamer=${userName}`)
         return response.data
@@ -205,7 +205,7 @@ export async function getStreamByUserName(userName) {
         return error
     }
 }
-export async function validate_stream_access(token, idStreamer) {
+async function validate_stream_access(token, idStreamer) {
     try {
         const response = await axios.get(
             `${baseURL}/stream/getStreamByNameUser?idStreamer=${idStreamer}`,
