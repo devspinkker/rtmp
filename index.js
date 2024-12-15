@@ -19,35 +19,6 @@ const spawn = require('child_process').spawn;
 const exec = require('child_process').exec;
 
 app.use(cors());
-app.use('/media', async (req, res, next) => {
-  const streamKey = req.path.split('/')[2]; // Obtener clave del stream desde la ruta
-  const authToken = req.query.token; // Token proporcionado por el cliente
-  const session = nms.getSessionByStreamPath(`/live/${streamKey}`); // Obtener sesión del stream
-
-  if (!session) {
-    return res.status(404).send('Stream no encontrado.');
-  }
-  console.log("paso algo")
-  // Verificar si el stream requiere autorización
-  if (session.user?.authorization) {
-    if (!authToken) {
-      return res.status(403).send('Acceso denegado: Falta token.');
-    }
-
-    // Validar token en el backend
-    try {
-      const response = await helpers.validate_stream_access(authToken)
-
-      if (!response.data || !response.data.valid) {
-        return res.status(403).send('Acceso denegado: Token inválido o sin autorización.');
-      }
-    } catch (error) {
-      return res.status(500).send('Error interno del servidor.');
-    }
-  }
-
-  next(); // Continuar si no requiere autorización o si la validación fue exitosa
-});
 
 const config = {
   rtmp: {
@@ -156,35 +127,7 @@ const config = {
   }
 };
 var nms = new NodeMediaServer(config);
-app.use('/media', async (req, res, next) => {
-  const streamKey = req.path.split('/')[2]; // Obtener clave del stream desde la ruta
-  const authToken = req.query.token; // Token proporcionado por el cliente
-  const session = nms.getSessionByStreamPath(`/live/${streamKey}`); // Obtener sesión del stream
 
-  if (!session) {
-    return res.status(404).send('Stream no encontrado.');
-  }
-  console.log("paso algo")
-  // Verificar si el stream requiere autorización
-  if (session.user?.authorization) {
-    if (!authToken) {
-      return res.status(403).send('Acceso denegado: Falta token.');
-    }
-
-    // Validar token en el backend
-    try {
-      const response = await helpers.validate_stream_access(authToken)
-
-      if (!response.data || !response.data.valid) {
-        return res.status(403).send('Acceso denegado: Token inválido o sin autorización.');
-      }
-    } catch (error) {
-      return res.status(500).send('Error interno del servidor.');
-    }
-  }
-
-  next(); // Continuar si no requiere autorización o si la validación fue exitosa
-});
 let url = process.env.BACKEND_URL + "/stream";
 
 async function updateOnline(Key, online) {
@@ -298,10 +241,14 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
 
     // establecer que se necesita auth
     const resgetStreamByUserName = await helpers.getStreamByUserName(user.NameUser)
-    console.log(resgetStreamByUserName);
+    const authorizationToView = resgetStreamByUserName?.data?.AuthorizationToView || {}
+    const requiresAuthorization =
+      authorizationToView.pinkker_prime || authorizationToView.subscription;
 
     session.user = {
       ffmpegProcess, // Guarda el proceso para poder matarlo luego
+      authorization: requiresAuthorization,
+      streamerId: user._id,
     };
 
 
@@ -341,62 +288,36 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
 
 
 // Ejecutar la conversión al principio del flujo de trabajo
-nms.on('donePublish', async (id, StreamPath, args) => {
-  let totalKey;
+app.use('/media', async (req, res, next) => {
+  const streamKey = req.path.split('/')[2]; // Obtener clave del stream desde la ruta
+  const streamPath = `/live/${streamKey}`; // Definir el StreamPath en el formato esperado
+  const session = nms.getSessionByStreamPath(streamPath); // Obtener la sesión del stream
 
-  const key = StreamPath.replace(/\//g, '');
-
-  if (key.length === 49) {
-    totalKey = key.substring(4, key.length);
-  } else {
-    totalKey = key;
-  }
-  if (totalKey.includes('_')) {
-    return;
+  if (!session) {
+    return res.status(404).send('Stream no encontrado.');
   }
 
-  // Llamada a la función que convierte los archivos .ts en todas las carpetas
-  // await convertAllTsToMp4InAllFolders();
+  console.log(`[Middleware] Verificando autorización para el stream: ${streamPath}`);
 
-  const user = await getUserByKey(key);
+  if (session.user?.authorization) {
+    if (!req.query.token) {
+      return res.status(403).send('Acceso denegado: Falta token.');
+    }
 
-  if (user && user.keyTransmission) {
-    const res = await updateOnline(user.keyTransmission, false);
+    const streamerId = session.user.streamerId; // Obtener el ID del streamer desde la sesión
 
-    console.log(`[Pinkker] [donePublish] Stream apagado con la clave ${totalKey}`);
-
-    if (id && nms.getSession(id) && nms.getSession(id).publisher) {
-      nms.getSession(id).publisher.stop();
+    try {
+      const response = await helpers.validate_stream_access(req.query.token, streamerId);
+      if (!response.data || !response.data.valid) {
+        return res.status(403).send('Acceso denegado: Token inválido o sin autorización.');
+      }
+    } catch (error) {
+      console.error(`[Middleware] Error al validar token: ${error.message}`);
+      return res.status(500).send('Error interno del servidor.');
     }
   }
-  const session = nms.getSession(id);
-  if (session) {
-    const user = session.user;
 
-    // Detener el proceso de FFmpeg si está grabando el stream
-    if (user && user.ffmpegProcess) {
-      const ffmpegProcess = user.ffmpegProcess;
-      ffmpegProcess.kill();  // Terminar el proceso de FFmpeg
-      console.log(`[Pinkker] [donePublish] FFmpeg detenido`);
-    }
-
-    // Eliminar los intervalos de actualización de miniaturas y promedio de espectadores
-    if (user && user.interval) {
-      clearInterval(user.interval);
-      clearInterval(user.secondInterval);
-      console.log(`[Pinkker] [donePublish] Intervalos de actualización detenidos`);
-    }
-
-    // Eliminar la carpeta de medios generada durante el stream (si es necesario)
-    const mediaFolder = path.join(__dirname, 'media', 'live', user.keyTransmission);
-    if (fs.existsSync(mediaFolder)) {
-      fs.rmdirSync(mediaFolder, { recursive: true });
-      console.log(`[Pinkker] [donePublish] Archivos de transmisión eliminados`);
-    }
-
-    // Limpiar la sesión del usuario
-    session.user = null;  // Limpiar cualquier referencia de usuario
-  }
+  next(); // Continuar si no requiere autorización o si la validación fue exitosa
 });
 
 
