@@ -11,7 +11,6 @@ const ffmpegPath = process.env.FFMPEG_PATH;
 ffmpeg.setFfmpegPath(ffmpegPath);
 const { router } = require('./routes/routes');
 
-var nms = new NodeMediaServer(config);
 
 const { getUserByKey, AverageViewers, GetUserBanInstream } = require("./controllers/userCtrl");
 const useExtractor = require("./middlewares/auth.middleware")
@@ -156,7 +155,36 @@ const config = {
     ],
   }
 };
+var nms = new NodeMediaServer(config);
+app.use('/media', async (req, res, next) => {
+  const streamKey = req.path.split('/')[2]; // Obtener clave del stream desde la ruta
+  const authToken = req.query.token; // Token proporcionado por el cliente
+  const session = nms.getSessionByStreamPath(`/live/${streamKey}`); // Obtener sesión del stream
 
+  if (!session) {
+    return res.status(404).send('Stream no encontrado.');
+  }
+  console.log("paso algo")
+  // Verificar si el stream requiere autorización
+  if (session.user?.authorization) {
+    if (!authToken) {
+      return res.status(403).send('Acceso denegado: Falta token.');
+    }
+
+    // Validar token en el backend
+    try {
+      const response = await helpers.validate_stream_access(authToken)
+
+      if (!response.data || !response.data.valid) {
+        return res.status(403).send('Acceso denegado: Token inválido o sin autorización.');
+      }
+    } catch (error) {
+      return res.status(500).send('Error interno del servidor.');
+    }
+  }
+
+  next(); // Continuar si no requiere autorización o si la validación fue exitosa
+});
 let url = process.env.BACKEND_URL + "/stream";
 
 async function updateOnline(Key, online) {
