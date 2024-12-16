@@ -166,41 +166,57 @@ async function getStreamingsOnline() {
 
 
 app.use('/live/:streamKey', async (req, res, next) => {
-  const { streamKey } = req.params;
-  console.log(`[Middleware] Validando acceso al stream: ${streamKey}`);
-  console.log(liveStreams);
+  let { streamKey } = req.params;
+  streamKey = streamKey.replace(/\.(flv|m3u8)$/, '');
+  streamKey = streamKey.replace(/^live/, '');
+  streamKey = streamKey.replace(/_\d+$/, '');
 
-  // const streamData = liveStreams.get(streamKey);
-  // console.log(streamData);
+  const streamData = liveStreams.get(streamKey);
 
-  // if (!streamData) {
-  //   return res.status(404).send('Stream no encontrado.');
-  // }
+  if (!streamData) {
+    return res.status(404).send('Stream no encontrado.');
+  }
+  if (streamData.requiresAuth) {
+    try {
+      const response = await helpers.validate_stream_access(req.query.token, streamData.streamerId);
+      if (!response.data || !response.data.valid) {
+        return res.status(403).send('Acceso denegado: Token inválido.');
+      }
+    } catch (error) {
+      console.error('Error al validar token:', error.message);
+      return res.status(500).send('Error interno del servidor.');
+    }
+  }
 
-  // if (streamData.requiresAuth) {
-  //   try {
-  //     const response = await helpers.validate_stream_access(req.query.token, streamData.streamerId);
-  //     if (!response.data || !response.data.valid) {
-  //       return res.status(403).send('Acceso denegado: Token inválido.');
-  //     }
-  //   } catch (error) {
-  //     console.error('Error al validar token:', error.message);
-  //     return res.status(500).send('Error interno del servidor.');
-  //   }
-  // }
-
-  // next();
+  next(); // Continuar si todo está validado correctamente
 });
-
 
 
 
 app.use(
   '/live',
   createProxyMiddleware({
-    target: 'http://127.0.0.1:8000', // Redirigir a NMS en el puerto interno
+    target: 'http://127.0.0.1:8000', // NMS en el puerto interno
     changeOrigin: true,
-    ws: true,
+    ws: true, // Asegura el soporte de WebSocket
+    onProxyReq(proxyReq, req, res) {
+      console.log(`[Proxy] ProxyReq para: ${req.url}`);
+    },
+    onProxyRes(proxyRes, req, res) {
+      console.log(`[Proxy] ProxyRes recibido: ${req.url}`);
+    },
+    onError(err, req, res) {
+      console.error(`[Proxy] Error en proxy: ${err.message}`);
+      res.status(500).send('Error en el proxy.');
+    },
+    pathRewrite: (path) => {
+      // Agregar la palabra "live" si no está presente
+
+      if (!path.startsWith('/live')) {
+        path = '/live/' + path;
+      }
+      return path.replace(/\.(flv|m3u8)$/, ''); // Reemplazar extensiones si es necesario
+    },
   })
 );
 
@@ -270,9 +286,9 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       mp4OutputPath
     ]);
 
-    // ffmpegProcess.stderr.on('data', (data) => {
-    //   console.log(`[FFmpeg] ${data}`);
-    // });
+    ffmpegProcess.stderr.on('data', (data) => {
+      console.log(`[FFmpeg] ${data}`);
+    });
 
     ffmpegProcess.on('close', (code) => {
       console.log(`[Pinkker] [PrePublish] FFmpeg finalizado con código: ${code}`);
@@ -300,27 +316,26 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       const Banned = await GetUserBanInstream("live" + totalKey);
       if (Banned) {
         console.log(`[Pinkker] Stream apagado debido a prohibición del usuario ${user.NameUser}`);
-        // clearInterval(bannedCheckInterval);
-        // clearInterval(session.user?.interval);
-        // clearInterval(session.user?.secondInterval);
       }
     }, 3 * 60 * 1000);
+    liveStreams.get(totalKey).intervals.push(bannedCheckInterval);
 
 
     if (cmt) {
       // Intervalo para actualizar el promedio de espectadores
-      const interval = setInterval(async () => {
+      const AverageViewersInterval = setInterval(async () => {
         await AverageViewers(user.id);
       }, 5 * 60 * 1000);
       // session.user.interval = interval;
-
+      liveStreams.get(totalKey).intervals.push(AverageViewersInterval);
       // Intervalo para generar miniaturas del stream
       const secondInterval = setInterval(async () => {
         await helpers.generateStreamThumbnail(user.keyTransmission, cmt);
       }, 5 * 60 * 1000);
-      // session.user.secondInterval = secondInterval;
+      liveStreams.get(totalKey).intervals.push(secondInterval);
     }
   }
+
 });
 // Ejecutar la conversión al principio del flujo de trabajo
 nms.on('donePublish', async (id, StreamPath, args) => {
@@ -354,37 +369,20 @@ nms.on('donePublish', async (id, StreamPath, args) => {
       console.log(`[donePublish] FFmpeg detenido para ${totalKey}`);
     }
 
-    streamData.intervals.forEach(clearInterval);
-    liveStreams.delete(totalKey);
-    console.log(streamData);
+    if (streamData?.intervals?.length) {
+      streamData.intervals.forEach(clearInterval);
+    }
 
+    liveStreams.delete(totalKey);
   }
 
-  // if (session) {
-  //   const user = session.user;
-  //   // Detener el proceso de FFmpeg si está grabando el stream
-  //   if (user && user.ffmpegProcess) {
-  //     const ffmpegProcess = user.ffmpegProcess;
-  //     ffmpegProcess.kill();  // Terminar el proceso de FFmpeg
-  //     console.log(`[Pinkker] [donePublish] FFmpeg detenido`);
-  //   }
 
-  //   // Eliminar los intervalos de actualización de miniaturas y promedio de espectadores
-  //   if (user && user.interval) {
-  //     clearInterval(user.interval);
-  //     clearInterval(user.secondInterval);
-  //     console.log(`[Pinkker] [donePublish] Intervalos de actualización detenidos`);
-  //   }
+  const mediaFolder = path.join(__dirname, 'media', 'live', user.keyTransmission);
+  if (fs.existsSync(mediaFolder)) {
+    fs.rmdirSync(mediaFolder, { recursive: true });
+    console.log(`[Pinkker] [donePublish] Archivos de transmisión eliminados`);
+  }
 
-  //   // Eliminar la carpeta de medios generada durante el stream (si es necesario)
-  //   const mediaFolder = path.join(__dirname, 'media', 'live', user.keyTransmission);
-  //   if (fs.existsSync(mediaFolder)) {
-  //     fs.rmdirSync(mediaFolder, { recursive: true });
-  //     console.log(`[Pinkker] [donePublish] Archivos de transmisión eliminados`);
-  //   }
-  //   // Limpiar la sesión del usuario
-  //   session.user = null;  // Limpiar cualquier referencia de usuario
-  // }
 });
 
 
