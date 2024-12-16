@@ -9,14 +9,15 @@ const path = require('path');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegPath = process.env.FFMPEG_PATH;
 ffmpeg.setFfmpegPath(ffmpegPath);
+const { createProxyMiddleware } = require('http-proxy-middleware');
 const { router } = require('./routes/routes');
 
 
 const { getUserByKey, AverageViewers, GetUserBanInstream } = require("./controllers/userCtrl");
-const useExtractor = require("./middlewares/auth.middleware")
 var fs = require('fs');
 const spawn = require('child_process').spawn;
-const exec = require('child_process').exec;
+
+const liveStreams = new Map();
 
 app.use(cors());
 
@@ -163,50 +164,45 @@ async function getStreamingsOnline() {
 
 
 
-nms.on('preRequest', async (req, res) => {
-  // Obtener el streamKey desde la URL
-  const streamKey = req.url.split('/')[2]?.split('.')[0]; // Extrae el streamKey del URL
-  const streamPath = `/live/${streamKey}`; // Construir el StreamPath
-  const session = nms.getSessionByStreamPath(streamPath); // Obtener la sesión por StreamPath
 
-  if (!session) {
-    res.statusCode = 404;
-    res.end('Stream no encontrado.');
-    return;
-  }
+app.use('/live/:streamKey', async (req, res, next) => {
+  const { streamKey } = req.params;
+  console.log(`[Middleware] Validando acceso al stream: ${streamKey}`);
+  console.log(liveStreams);
 
-  console.log(`[Middleware] Verificando autorización para el stream: ${streamPath}`);
+  // const streamData = liveStreams.get(streamKey);
+  // console.log(streamData);
 
-  // Verificar si el stream requiere autorización
-  if (session.user?.authorization) {
-    const token = req.query?.token; // Extraer token de la query string
-    if (!token) {
-      res.statusCode = 403;
-      res.end('Acceso denegado: Falta token.');
-      return;
-    }
+  // if (!streamData) {
+  //   return res.status(404).send('Stream no encontrado.');
+  // }
 
-    const streamerId = session.user.streamerId; // Obtener el ID del streamer desde la sesión
+  // if (streamData.requiresAuth) {
+  //   try {
+  //     const response = await helpers.validate_stream_access(req.query.token, streamData.streamerId);
+  //     if (!response.data || !response.data.valid) {
+  //       return res.status(403).send('Acceso denegado: Token inválido.');
+  //     }
+  //   } catch (error) {
+  //     console.error('Error al validar token:', error.message);
+  //     return res.status(500).send('Error interno del servidor.');
+  //   }
+  // }
 
-    try {
-      // Validar el token en el backend
-      const response = await helpers.validate_stream_access(token, streamerId);
-      if (!response.data || !response.data.valid) {
-        res.statusCode = 403;
-        res.end('Acceso denegado: Token inválido o sin autorización.');
-        return;
-      }
-    } catch (error) {
-      console.error(`[Middleware] Error al validar token: ${error.message}`);
-      res.statusCode = 500;
-      res.end('Error interno del servidor.');
-      return;
-    }
-  }
-
-  // Continuar si no se requiere autorización o si la validación fue exitosa
+  // next();
 });
 
+
+
+
+app.use(
+  '/live',
+  createProxyMiddleware({
+    target: 'http://127.0.0.1:8000', // Redirigir a NMS en el puerto interno
+    changeOrigin: true,
+    ws: true,
+  })
+);
 
 nms.on('preConnect', (id, args) => {
   console.log('[Pinkker] [NodeEvent on preConnect]', `id=${id} args=${JSON.stringify(args)}`);
@@ -217,7 +213,7 @@ nms.on('doneConnect', (id, args) => {
 });
 
 nms.on('prePublish', async (id, StreamPath, args, cmt) => {
-  const session = nms.getSession(id);
+
   const key = StreamPath.replace(/\//g, "");
   let totalKey = key.length === 49 ? key.substring(4, key.length) : key;
   console.log(key);
@@ -226,7 +222,7 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   if (user?.Banned) {
     console.log("[Pinkker] Usuario no encontrado o prohibido");
     if (user.NameUser !== "") {
-      session.reject();
+
       return;
     }
   }
@@ -237,7 +233,7 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
 
     if ((!user.Partner.active && streamingsOnline.data >= 5) || (user.Partner.active && streamingsOnline.data >= 10)) {
       console.log("[Pinkker] Máximo de streamings online alcanzado");
-      session.reject();
+
       return;
     }
   }
@@ -285,15 +281,15 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
     // establecer que se necesita auth
     const resgetStreamByUserName = await helpers.getStreamByUserName(user.NameUser)
     const authorizationToView = resgetStreamByUserName?.data?.AuthorizationToView || {}
-    const requiresAuthorization =
+    const requiresAuth =
       authorizationToView.pinkker_prime || authorizationToView.subscription;
 
-    session.user = {
-      ffmpegProcess, // Guarda el proceso para poder matarlo luego
-      authorization: requiresAuthorization,
-      streamerId: user._id,
-    };
-
+    liveStreams.set(totalKey, {
+      streamerId: user.id,
+      ffmpegProcess: ffmpegProcess,
+      intervals: [],
+      requiresAuth,
+    });
 
 
     // iniciar stream
@@ -304,32 +300,92 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       const Banned = await GetUserBanInstream("live" + totalKey);
       if (Banned) {
         console.log(`[Pinkker] Stream apagado debido a prohibición del usuario ${user.NameUser}`);
-        session.reject();
-        clearInterval(bannedCheckInterval);
-        clearInterval(session.user?.interval);
-        clearInterval(session.user?.secondInterval);
+        // clearInterval(bannedCheckInterval);
+        // clearInterval(session.user?.interval);
+        // clearInterval(session.user?.secondInterval);
       }
     }, 3 * 60 * 1000);
 
-    session.user = { bannedCheckInterval };
 
     if (cmt) {
       // Intervalo para actualizar el promedio de espectadores
       const interval = setInterval(async () => {
         await AverageViewers(user.id);
       }, 5 * 60 * 1000);
-      session.user.interval = interval;
+      // session.user.interval = interval;
 
       // Intervalo para generar miniaturas del stream
       const secondInterval = setInterval(async () => {
         await helpers.generateStreamThumbnail(user.keyTransmission, cmt);
       }, 5 * 60 * 1000);
-      session.user.secondInterval = secondInterval;
+      // session.user.secondInterval = secondInterval;
     }
   }
 });
+// Ejecutar la conversión al principio del flujo de trabajo
+nms.on('donePublish', async (id, StreamPath, args) => {
+  let totalKey;
+  const key = StreamPath.replace(/\//g, '');
 
+  if (key.length === 49) {
+    totalKey = key.substring(4, key.length);
+  } else {
+    totalKey = key;
+  }
+  if (totalKey.includes('_')) {
+    return;
+  }
 
+  // Llamada a la función que convierte los archivos .ts en todas las carpetas
+  // await convertAllTsToMp4InAllFolders();
+  const user = await getUserByKey(key);
+  if (user && user.keyTransmission) {
+    await updateOnline(user.keyTransmission, false);
+    console.log(`[Pinkker] [donePublish] Stream apagado con la clave ${totalKey}`);
+    if (id && nms.getSession(id) && nms.getSession(id).publisher) {
+      nms.getSession(id).publisher.stop();
+    }
+  }
+  const streamData = liveStreams.get(totalKey);
+
+  if (streamData) {
+    if (streamData.ffmpegProcess) {
+      streamData.ffmpegProcess.kill();
+      console.log(`[donePublish] FFmpeg detenido para ${totalKey}`);
+    }
+
+    streamData.intervals.forEach(clearInterval);
+    liveStreams.delete(totalKey);
+    console.log(streamData);
+
+  }
+
+  // if (session) {
+  //   const user = session.user;
+  //   // Detener el proceso de FFmpeg si está grabando el stream
+  //   if (user && user.ffmpegProcess) {
+  //     const ffmpegProcess = user.ffmpegProcess;
+  //     ffmpegProcess.kill();  // Terminar el proceso de FFmpeg
+  //     console.log(`[Pinkker] [donePublish] FFmpeg detenido`);
+  //   }
+
+  //   // Eliminar los intervalos de actualización de miniaturas y promedio de espectadores
+  //   if (user && user.interval) {
+  //     clearInterval(user.interval);
+  //     clearInterval(user.secondInterval);
+  //     console.log(`[Pinkker] [donePublish] Intervalos de actualización detenidos`);
+  //   }
+
+  //   // Eliminar la carpeta de medios generada durante el stream (si es necesario)
+  //   const mediaFolder = path.join(__dirname, 'media', 'live', user.keyTransmission);
+  //   if (fs.existsSync(mediaFolder)) {
+  //     fs.rmdirSync(mediaFolder, { recursive: true });
+  //     console.log(`[Pinkker] [donePublish] Archivos de transmisión eliminados`);
+  //   }
+  //   // Limpiar la sesión del usuario
+  //   session.user = null;  // Limpiar cualquier referencia de usuario
+  // }
+});
 
 
 app.use(router);
