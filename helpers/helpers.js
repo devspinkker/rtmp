@@ -208,7 +208,7 @@ async function getStreamByUserName(userName) {
 async function validate_stream_access(token, idStreamer) {
     try {
         const response = await axios.get(
-            `${baseURL}/stream/getStreamByNameUser?idStreamer=${idStreamer}`,
+            `${baseURL}/stream/ValidateStreamAccess?idStreamer=${idStreamer}`,
             {
                 headers: {
                     Authorization: `Bearer ${token}`, // Enviar el token en el encabezado Authorization
