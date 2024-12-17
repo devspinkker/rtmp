@@ -179,12 +179,14 @@ app.use('/live/:streamKey', async (req, res, next) => {
   if (streamData.requiresAuth) {
     try {
       const response = await helpers.validate_stream_access(req.query.token, streamData.streamerId);
-      if (!response.data || !response.data.valid) {
+      console.log(response);
+
+      if (response?.message === "invalid") {
         return res.status(403).send('Acceso denegado: Token inválido.');
       }
     } catch (error) {
       console.error('Error al validar token:', error.message);
-      return res.status(500).send('Error interno del servidor.');
+      return res.status(403).send('Error interno del servidor.');
     }
   }
 
