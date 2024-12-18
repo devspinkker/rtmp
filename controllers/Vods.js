@@ -31,7 +31,7 @@ const vodStreamKey = ('', async (req, res) => {
 // Handler para servir archivos individuales (.ts) de un VOD
 function handleVodFile(req, res) {
     const { key, file } = req.params;
-    const tempHLSDir = path.join(process.cwd(), '../media', 'storage', 'live2', key, 'hls');
+    const tempHLSDir = path.join(process.cwd(), '/media', 'storage', 'live2', key, 'hls');
     const filePath = path.join(tempHLSDir, file);
 
     if (fs.existsSync(filePath)) {
