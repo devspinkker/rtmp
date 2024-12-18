@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-
+const spawn = require('child_process').spawn;
 const vodStreamKey = ('', async (req, res) => {
     const streamKeyreq = req.params.streamKey;
     const vodFolder = path.join(storageDir, streamKeyreq);
