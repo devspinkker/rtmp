@@ -274,19 +274,31 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
 
     // Generar el archivo .mp4 durante la transmisión
     const mp4OutputPath = path.join(destDir, 'stream.mp4');
+    const HlsOutputPath = path.join(destDir, "hls", "index.m3u8");
+
+    if (!fs.existsSync(path.dirname(HlsOutputPath))) {
+      fs.mkdirSync(path.dirname(HlsOutputPath), { recursive: true });
+    }
+
 
     console.log(`[Pinkker] [PrePublish] Comenzando a grabar el stream en ${mp4OutputPath}`);
-
     const ffmpegProcess = spawn(ffmpegPath, [
-      '-i', `rtmp://127.0.0.1:1935/live/${totalKey}`,
-      '-c:v', 'copy',
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-preset', 'ultrafast',
-      '-threads', '1',
-      '-f', 'mp4',
-      mp4OutputPath
+      '-i', `rtmp://127.0.0.1:1935/live/${totalKey}`, // Entrada RTMP
+      '-map', '0:v', '-map', '0:a',  // Mapea video y audio para ambas salidas
+      '-c:v', 'copy',                // Copia el video sin re-codificar para MP4
+      '-c:a', 'aac',                 // Transcodifica el audio a AAC
+      '-b:a', '128k',                // Bitrate del audio
+      '-preset', 'ultrafast',        // Preset rápido
+      // Salida .mp4
+      mp4OutputPath,
+      // Salida HLS
+      '-f', 'hls',                   // Especifica formato HLS
+      '-hls_time', '10',             // Duración de cada segmento
+      '-hls_list_size', '0',         // Incluye todos los segmentos en `index.m3u8`
+      '-hls_flags', 'delete_segments+append_list', // Manejo dinámico de segmentos
+      HlsOutputPath,
     ]);
+
 
     ffmpegProcess.stderr.on('data', (data) => {
       console.log(`[FFmpeg] ${data}`);
@@ -353,8 +365,6 @@ nms.on('donePublish', async (id, StreamPath, args) => {
     return;
   }
 
-  // Llamada a la función que convierte los archivos .ts en todas las carpetas
-  // await convertAllTsToMp4InAllFolders();
   const user = await getUserByKey(key);
   if (user && user.keyTransmission) {
     await updateOnline(user.keyTransmission, false);
