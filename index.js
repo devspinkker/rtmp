@@ -257,7 +257,7 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   }
 
   if (user.NameUser !== "") {
-    const mediaFolder = path.join(__dirname, 'media', 'live', totalKey);
+    const mediaFolder = path.join(__dirname, 'media', 'live2', totalKey);
 
     if (!fs.existsSync(mediaFolder)) {
       fs.mkdirSync(mediaFolder, { recursive: true });
@@ -379,7 +379,7 @@ nms.on('donePublish', async (id, StreamPath, args) => {
   }
 
 
-  const mediaFolder = path.join(__dirname, 'media', 'live', user.keyTransmission);
+  const mediaFolder = path.join(__dirname, 'media', 'live2', user.keyTransmission);
   if (fs.existsSync(mediaFolder)) {
     fs.rmdirSync(mediaFolder, { recursive: true });
     console.log(`[Pinkker] [donePublish] Archivos de transmisión eliminados`);
