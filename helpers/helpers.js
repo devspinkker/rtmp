@@ -46,11 +46,10 @@ const generateStreamThumbnail = async (key, cmt) => {
         const stream_key = key.substring(4, key.length);
 
         // Crear un nombre basado en `cmt` y la fecha actual
-        const timestamp = Date.now(); // Marca de tiempo en milisegundos
-        const randomFilename = `${timestamp}.png`;
+        const randomFilename = `${stream_key}.webp`;
 
         // Crear la ruta completa para guardar la miniatura
-        const folderPath = path.join(BASE_UPLOAD_PATH,);
+        const folderPath = path.join(BASE_UPLOAD_PATH);
         if (!fs.existsSync(folderPath)) {
             fs.mkdirSync(folderPath, { recursive: true });
         }
@@ -64,6 +63,8 @@ const generateStreamThumbnail = async (key, cmt) => {
             '-s', '1920x1080',
             '-vframes', '1',
             '-vf', 'scale=-2:300',
+            '-c:v', 'libwebp',
+            '-quality', '70',
             thumbnailPath,
         ];
 
