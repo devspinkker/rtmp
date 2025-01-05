@@ -41,12 +41,11 @@ async function createVod(url, stream_key) {
 
 const BASE_UPLOAD_PATH = process.env.BASE_UPLOAD_PATH
 
-const generateStreamThumbnail = async (key, cmt) => {
+const generateStreamThumbnail = async (key, cmt, id) => {
     setTimeout(async () => {
         const stream_key = key.substring(4, key.length);
 
-        // Crear un nombre basado en `cmt` y la fecha actual
-        const randomFilename = `${stream_key}.webp`;
+        const randomFilename = `${stream_key}_${id}.webp`;
 
         // Crear la ruta completa para guardar la miniatura
         const folderPath = path.join(BASE_UPLOAD_PATH);
@@ -92,6 +91,7 @@ const generateStreamThumbnail = async (key, cmt) => {
         }
     }, 30000);
 };
+
 
 const uploadStream = async (file_name, stream_key) => {
     const filePath = process.env.MEDIA_FOLDER + stream_key + "/" + file_name;

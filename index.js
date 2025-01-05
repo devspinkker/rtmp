@@ -343,14 +343,17 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       // session.user.interval = interval;
       liveStreams.get(totalKey).intervals.push(AverageViewersInterval);
       // Intervalo para generar miniaturas del stream
+      const thumbnailId = Date.now();  // Generar un ID único constante
+      await helpers.generateStreamThumbnail(user.keyTransmission, cmt, thumbnailId);
+
       const secondInterval = setInterval(async () => {
-        await helpers.generateStreamThumbnail(user.keyTransmission, cmt);
+        await helpers.generateStreamThumbnail(user.keyTransmission, cmt, thumbnailId);
       }, 5 * 60 * 1000);
       liveStreams.get(totalKey).intervals.push(secondInterval);
     }
   }
-
 });
+
 // Ejecutar la conversión al principio del flujo de trabajo
 nms.on('donePublish', async (id, StreamPath, args) => {
   let totalKey;
@@ -402,7 +405,7 @@ app.use(router);
 
 setInterval(() => {
   console.log('[Pinkker] Iniciando limpieza de carpetas HLS antiguas...');
-  helpers.cleanOldHLS();
+  // helpers.cleanOldHLS();
   // }, 1 * 60 * 1000);
 }, 24 * 60 * 60 * 1000);
 
