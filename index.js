@@ -340,16 +340,19 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       const AverageViewersInterval = setInterval(async () => {
         await AverageViewers(user.id);
       }, 5 * 60 * 1000);
-      // session.user.interval = interval;
       liveStreams.get(totalKey).intervals.push(AverageViewersInterval);
-      // Intervalo para generar miniaturas del stream
-      const thumbnailId = Date.now();  // Generar un ID único constante
-      await helpers.generateStreamThumbnail(user.keyTransmission, cmt, thumbnailId);
 
-      const secondInterval = setInterval(async () => {
+
+      const thumbnailId = Date.now();  // Generar un ID único constante
+      setTimeout(async () => {
+
         await helpers.generateStreamThumbnail(user.keyTransmission, cmt, thumbnailId);
-      }, 5 * 60 * 1000);
-      liveStreams.get(totalKey).intervals.push(secondInterval);
+
+        const secondInterval = setInterval(async () => {
+          await helpers.generateStreamThumbnail(user.keyTransmission, cmt, thumbnailId);
+        }, 5 * 60 * 1000);
+        liveStreams.get(totalKey).intervals.push(secondInterval);
+      }, 30 * 1000)
     }
   }
 });
