@@ -101,6 +101,7 @@ function handleVodIndexM3u8(req, res) {
         res.status(500).send('El archivo HLS no se generó a tiempo.');
     }, 10000);
 }
+
 async function handleVodIndexM3u8live(req, res) {
     const streamKey = req.params.streamKey;
     const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
@@ -164,6 +165,27 @@ async function handleVodIndexM3u8liveFiles(req, res) {
         res.status(404).send('Archivo no encontrado');
     }
 }
+//descargar vod
+function handleVodDownload(req, res) {
+    const { key } = req.params;
+    const mp4Path = path.join(process.cwd(), 'media', 'storage', 'live2', key, 'stream.mp4');
+    if (fs.existsSync(mp4Path)) {
+        console.log(`[Pinkker] Descargando VOD MP4 para ${key}`);
+        res.setHeader('Content-Type', 'video/mp4');
+        res.setHeader('Content-Disposition', `attachment; filename="${key}.mp4"`);
+        res.download(mp4Path);
+    } else {
+        console.error(`[Pinkker] Archivo MP4 no encontrado para ${key}`);
+        res.status(404).send('El archivo MP4 no fue encontrado.');
+    }
+}
 
 
-module.exports = { vodStreamKey, handleVodIndexM3u8liveFiles, handleVodFile, handleVodIndexM3u8, handleVodIndexM3u8live }
+module.exports = {
+    vodStreamKey,
+    handleVodIndexM3u8liveFiles,
+    handleVodFile,
+    handleVodIndexM3u8,
+    handleVodIndexM3u8live,
+    handleVodDownload
+}
