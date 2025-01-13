@@ -5,7 +5,6 @@ const { StreamStreamKey } = require("../controllers/GetClipsChunks");
 const router = Router();
 
 // clips
-console.log("QEE");
 
 // entregar index para los files 
 router.get('/stream/:streamKey/index.m3u8', handleVodIndexM3u8live);
