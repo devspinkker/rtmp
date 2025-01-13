@@ -167,6 +167,8 @@ async function handleVodIndexM3u8liveFiles(req, res) {
 }
 //descargar vod
 function handleVodDownload(req, res) {
+    console.log("AAA");
+
     const { key } = req.params;
     const mp4Path = path.join(process.cwd(), 'media', 'storage', 'live2', key, 'stream.mp4');
     if (fs.existsSync(mp4Path)) {

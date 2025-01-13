@@ -5,6 +5,7 @@ const { StreamStreamKey } = require("../controllers/GetClipsChunks");
 const router = Router();
 
 // clips
+console.log("QEE");
 
 // entregar index para los files 
 router.get('/stream/:streamKey/index.m3u8', handleVodIndexM3u8live);
@@ -16,6 +17,6 @@ router.get('/stream/:streamKey/:file', handleVodIndexM3u8liveFiles);
 router.get('/stream/vod/:key/index.m3u8', handleVodIndexM3u8);
 // entregar los .ts en cuestion
 router.get("/stream/vod/:key/:file", handleVodFile);
-router.get('/stream/vod/:key/download', handleVodDownload);
+router.get('/stream/download/vod/:key', handleVodDownload);
 
 module.exports = { router }
