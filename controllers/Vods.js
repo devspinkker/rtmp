@@ -106,8 +106,8 @@ function handleVodIndexM3u8(req, res) {
 async function handleVodIndexM3u8live(req, res) {
     const streamKey = req.params.streamKey;
 
-    const res = await GetCurrentStreamSummaryForToken(streamKey)
-    console.log(res);
+    const StreamSummary = await GetCurrentStreamSummaryForToken(streamKey)
+    console.log(StreamSummary);
 
     const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
 
