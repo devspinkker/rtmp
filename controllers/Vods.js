@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { GetCurrentStreamSummaryForToken } = require('../helpers/helpers');
 const spawn = require('child_process').spawn;
 const vodStreamKey = ('', async (req, res) => {
     const streamKeyreq = req.params.streamKey;
@@ -104,6 +105,10 @@ function handleVodIndexM3u8(req, res) {
 
 async function handleVodIndexM3u8live(req, res) {
     const streamKey = req.params.streamKey;
+
+    const res = await GetCurrentStreamSummaryForToken(streamKey)
+    console.log(res);
+
     const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
 
     try {

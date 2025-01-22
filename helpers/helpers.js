@@ -222,6 +222,18 @@ async function validate_stream_access(token, idStreamer) {
         return error.response?.data || error;
     }
 }
+async function GetCurrentStreamSummaryForToken(key) {
+    try {
+        const response = await axios.get(
+            `${BACKEND_URL}/StreamSummary/GetCurrentStreamSummaryForToken?key=${key}`,
+        );
+        return response.data;
+    } catch (error) {
+        console.error('GetCurrentStreamSummaryForToken:', error.message);
+        return error.response?.data || error;
+    }
+}
+
 module.exports = {
     generateStreamThumbnail: generateStreamThumbnail,
     uploadStream: uploadStream,
@@ -229,5 +241,6 @@ module.exports = {
     generateM3u8Content: generateM3u8Content,
     getLastTsFiles: getLastTsFiles,
     getStreamByUserName,
-    validate_stream_access
+    validate_stream_access,
+    GetCurrentStreamSummaryForToken
 };

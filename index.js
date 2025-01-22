@@ -45,7 +45,7 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10]",
+        hlsFlags: "[hls_time=7:hls_list_size=10]",
         hlsKeep: false,
         vc: "libx264",
         h264_profile: "main",
@@ -59,7 +59,7 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10]",
+        hlsFlags: "[hls_time=7:hls_list_size=10]",
         hlsKeep: false,
         vc: "h264_nvenc",
         h264_profile: "main",
@@ -74,7 +74,7 @@ const config = {
       {
         app: "live",
         hls: true,
-        hlsFlags: "[hls_time=1:hls_list_size=10]",
+        hlsFlags: "[hls_time=7:hls_list_size=10]",
         hlsKeep: false,
         vc: "hevc_nvenc",
         hevc_profile: "main",
@@ -293,7 +293,7 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       mp4OutputPath,
       // Salida HLS
       '-f', 'hls',                   // Especifica formato HLS
-      '-hls_time', '10',             // Duración de cada segmento
+      '-hls_time', '7',             // Duración de cada segmento
       '-hls_list_size', '0',         // Incluye todos los segmentos en `index.m3u8`
       '-hls_flags', 'delete_segments+append_list', // Manejo dinámico de segmentos
       HlsOutputPath,
@@ -351,7 +351,13 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
         const secondInterval = setInterval(async () => {
           await helpers.generateStreamThumbnail(user.keyTransmission, cmt, thumbnailId);
         }, 5 * 60 * 1000);
-        liveStreams.get(totalKey).intervals.push(secondInterval);
+        const streamData = liveStreams.get(totalKey);
+
+        if (streamData && Array.isArray(streamData.intervals)) {
+          streamData.intervals.push(secondInterval);
+        } else {
+          console.error(`Stream data not found or intervals is not an array for key: ${totalKey}`);
+        }
       }, 30 * 1000)
     }
   }
