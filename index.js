@@ -289,13 +289,14 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       '-c:a', 'aac',                 // Transcodifica el audio a AAC
       '-b:a', '128k',                // Bitrate del audio
       '-preset', 'ultrafast',        // Preset rápido
+
       // Salida .mp4
       mp4OutputPath,
       // Salida HLS
       '-f', 'hls',                   // Especifica formato HLS
       '-hls_time', '7',             // Duración de cada segmento
       '-hls_list_size', '0',         // Incluye todos los segmentos en `index.m3u8`
-      '-hls_flags', 'delete_segments+append_list', // Manejo dinámico de segmentos
+      '-hls_flags', 'append_list',
       HlsOutputPath,
     ]);
 
