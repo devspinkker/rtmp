@@ -223,6 +223,8 @@ async function validate_stream_access(token, idStreamer) {
     }
 }
 async function GetCurrentStreamSummaryForToken(key) {
+    console.log(`${baseURL}/StreamSummary/GetCurrentStreamSummaryForToken?key=${key}`);
+
     try {
         const response = await axios.get(
             `${baseURL}/StreamSummary/GetCurrentStreamSummaryForToken?key=${key}`,

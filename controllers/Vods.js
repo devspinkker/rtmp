@@ -107,65 +107,79 @@ async function handleVodIndexM3u8live(req, res) {
     const streamKey = req.params.streamKey;
 
     const StreamSummary = await GetCurrentStreamSummaryForToken(streamKey)
-    console.log(StreamSummary);
+    console.log(StreamSummary.id);
+    if (StreamSummary?.id) {
+        // const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
+        const mediaFolder = path.join(process.cwd(), 'media', 'storage', 'live2', StreamSummary.id, 'hls');
 
-    const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
+        try {
+            // Leer el archivo index.m3u8
+            const m3u8Content = await fs.promises.readFile(path.join(mediaFolder, 'index.m3u8'), 'utf8');
+            const lines = m3u8Content.split('\n');
 
-    try {
-        // Leer el archivo index.m3u8
-        const m3u8Content = await fs.promises.readFile(path.join(mediaFolder, 'index.m3u8'), 'utf8');
-        const lines = m3u8Content.split('\n');
+            // Filtrar solo los archivos .ts
+            const tsFiles = lines
+                .filter(line => line.endsWith('.ts'))
+                .map(line => path.join(mediaFolder, line.trim()));
 
-        // Filtrar solo los archivos .ts
-        const tsFiles = lines
-            .filter(line => line.endsWith('.ts'))
-            .map(line => path.join(mediaFolder, line.trim()));
+            // Obtener los últimos 10 archivos .ts 
+            const last10Files = tsFiles.slice(-10);
 
-        // Obtener los últimos 10 archivos .ts 
-        const last10Files = tsFiles.slice(-10);
+            if (last10Files.length === 0) {
+                return res.status(404).send('No hay archivos .ts disponibles.');
+            }
 
-        if (last10Files.length === 0) {
-            return res.status(404).send('No hay archivos .ts disponibles.');
+            // Crear el contenido del m3u8
+            const m3u8ContentResponse = [
+                '#EXTM3U',
+                '#EXT-X-VERSION:3',
+                '#EXT-X-ALLOW-CACHE:YES',
+                '#EXT-X-TARGETDURATION:10',
+                '#EXT-X-MEDIA-SEQUENCE:0'
+            ];
+
+            last10Files.forEach(file => {
+                const duration = 10; // Ajusta según la duración real de cada archivo
+                m3u8ContentResponse.push(`#EXTINF:${duration},`);
+                m3u8ContentResponse.push(path.basename(file));
+            });
+
+            m3u8ContentResponse.push('#EXT-X-ENDLIST');
+
+            res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+            res.send(m3u8ContentResponse.join('\n'));
+        } catch (error) {
+            console.error('Error al generar el archivo .m3u8:', error);
+            res.status(500).send('Error interno al procesar la solicitud.');
         }
-
-        // Crear el contenido del m3u8
-        const m3u8ContentResponse = [
-            '#EXTM3U',
-            '#EXT-X-VERSION:3',
-            '#EXT-X-ALLOW-CACHE:YES',
-            '#EXT-X-TARGETDURATION:10',
-            '#EXT-X-MEDIA-SEQUENCE:0'
-        ];
-
-        last10Files.forEach(file => {
-            const duration = 10; // Ajusta según la duración real de cada archivo
-            m3u8ContentResponse.push(`#EXTINF:${duration},`);
-            m3u8ContentResponse.push(path.basename(file));
-        });
-
-        m3u8ContentResponse.push('#EXT-X-ENDLIST');
-
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-        res.send(m3u8ContentResponse.join('\n'));
-    } catch (error) {
-        console.error('Error al generar el archivo .m3u8:', error);
+    } else {
         res.status(500).send('Error interno al procesar la solicitud.');
     }
+
 }
 async function handleVodIndexM3u8liveFiles(req, res) {
     const streamKey = req.params.streamKey;
     const file = req.params.file;
-    const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
-    const filePath = path.join(mediaFolder, file);
 
-    if (fs.existsSync(filePath)) {
-        if (file.endsWith('.m3u8')) {
-            res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
-        } else if (file.endsWith('.ts')) {
-            res.setHeader('Content-Type', 'video/MP2T');
+
+    const StreamSummary = await GetCurrentStreamSummaryForToken(streamKey)
+    console.log(StreamSummary.id);
+    if (StreamSummary?.id) {
+        const mediaFolder = path.join(process.cwd(), 'media', 'storage', 'live2', StreamSummary.id, 'hls');
+
+        const filePath = path.join(mediaFolder, file);
+
+        if (fs.existsSync(filePath)) {
+            if (file.endsWith('.m3u8')) {
+                res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+            } else if (file.endsWith('.ts')) {
+                res.setHeader('Content-Type', 'video/MP2T');
+            }
+            const stream = fs.createReadStream(filePath);
+            stream.pipe(res);
+        } else {
+            res.status(404).send('Archivo no encontrado');
         }
-        const stream = fs.createReadStream(filePath);
-        stream.pipe(res);
     } else {
         res.status(404).send('Archivo no encontrado');
     }
