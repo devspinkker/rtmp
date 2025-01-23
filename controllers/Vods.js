@@ -106,15 +106,15 @@ function handleVodIndexM3u8(req, res) {
 async function handleVodIndexM3u8live(req, res) {
     const streamKey = req.params.streamKey;
 
-    const StreamSummary = await GetCurrentStreamSummaryForToken(streamKey)
-    console.log(StreamSummary.id);
+    const { data } = await GetCurrentStreamSummaryForToken(streamKey)
+    console.log(data.id);
     console.log("StreamSummary");
-    console.log(StreamSummary);
+    console.log(data);
     console.log("StreamSummary");
 
-    if (StreamSummary?.id) {
+    if (data?.id) {
         // const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
-        const mediaFolder = path.join(process.cwd(), 'media', 'storage', 'live2', StreamSummary.id, 'hls');
+        const mediaFolder = path.join(process.cwd(), 'media', 'storage', 'live2', data.id, 'hls');
 
         try {
             // Leer el archivo index.m3u8
@@ -166,10 +166,10 @@ async function handleVodIndexM3u8liveFiles(req, res) {
     const file = req.params.file;
 
 
-    const StreamSummary = await GetCurrentStreamSummaryForToken(streamKey)
-    console.log(StreamSummary.id);
-    if (StreamSummary?.id) {
-        const mediaFolder = path.join(process.cwd(), 'media', 'storage', 'live2', StreamSummary.id, 'hls');
+    const { data } = await GetCurrentStreamSummaryForToken(streamKey)
+    console.log(data.id);
+    if (data?.id) {
+        const mediaFolder = path.join(process.cwd(), 'media', 'storage', 'live2', data.id, 'hls');
 
         const filePath = path.join(mediaFolder, file);
 
