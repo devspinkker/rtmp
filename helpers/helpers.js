@@ -216,7 +216,7 @@ async function validate_stream_access(token, idStreamer) {
                 },
             }
         );
-        return response.data;
+        return response.data.data;
     } catch (error) {
         console.error('Error en validate_stream_access:', error.message);
         return error.response?.data || error;

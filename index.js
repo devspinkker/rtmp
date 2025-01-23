@@ -300,9 +300,9 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
     ]);
 
 
-    ffmpegProcess.stderr.on('data', (data) => {
-      console.log(`[FFmpeg] ${data}`);
-    });
+    // ffmpegProcess.stderr.on('data', (data) => {
+    //   console.log(`[FFmpeg] ${data}`);
+    // });
 
     ffmpegProcess.on('close', (code) => {
       console.log(`[Pinkker] [PrePublish] FFmpeg finalizado con código: ${code}`);
