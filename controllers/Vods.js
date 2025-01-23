@@ -107,10 +107,6 @@ async function handleVodIndexM3u8live(req, res) {
     const streamKey = req.params.streamKey;
 
     const { data } = await GetCurrentStreamSummaryForToken(streamKey)
-    console.log(data.id);
-    console.log("StreamSummary");
-    console.log(data);
-    console.log("StreamSummary");
 
     if (data?.id) {
         // const mediaFolder = path.join(process.cwd(), 'media', 'live', streamKey);
@@ -167,7 +163,6 @@ async function handleVodIndexM3u8liveFiles(req, res) {
 
 
     const { data } = await GetCurrentStreamSummaryForToken(streamKey)
-    console.log(data.id);
     if (data?.id) {
         const mediaFolder = path.join(process.cwd(), 'media', 'storage', 'live2', data.id, 'hls');
 
