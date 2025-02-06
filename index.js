@@ -274,7 +274,7 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
 
     // Generar el archivo .mp4 durante la transmisión
     const mp4OutputPath = path.join(destDir, 'stream.mp4');
-    const HlsOutputPath = path.join(destDir, "hls", "index.m3u8");
+    const HlsOutputPath = path.join(destDir, "hls");
 
     if (!fs.existsSync(path.dirname(HlsOutputPath))) {
       fs.mkdirSync(path.dirname(HlsOutputPath), { recursive: true });
@@ -290,20 +290,9 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       '-b:a', '128k',                // Bitrate del audio
       '-preset', 'ultrafast',        // Usa el preset más rápido
       '-flush_packets', '1',         // Vaciar paquetes inmediatamente
-
-
-      // Salida .mp4
       mp4OutputPath,
-
-      // // Salida HLS
-      // '-f', 'hls',                   // Especifica formato HLS
-      // '-hls_time', '7',              // Duración de cada segmento (1 segundo)
-      // '-hls_list_size', '0',         // Incluye todos los segmentos en index.m3u8
-      // '-hls_flags', 'split_by_time', // Fragmenta por tiempo (si es necesario)
-      // HlsOutputPath,
     ]);
 
-    // console.log(`[Pinkker] [PrePublish] Iniciando copia de segmentos HLS de ${hlsFolder} a ${vodDir}`);
     helpers.startHLSWatcher(mediaFolder, HlsOutputPath);
 
     ffmpegProcess.stderr.on('data', (data) => {
