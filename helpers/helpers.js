@@ -254,7 +254,6 @@ function startHLSWatcher(sourceDir, targetDir) {
 
     console.log(`Iniciando watcher en: ${sourceDir}`);
 
-    // Configuración del watcher: se activa en cada adición o cambio, y se espera a que el archivo se escriba completamente.
     const watcher = chokidar.watch(sourceDir, {
         persistent: true,
         ignoreInitial: false,
@@ -264,7 +263,6 @@ function startHLSWatcher(sourceDir, targetDir) {
         }
     });
 
-    // Función para copiar un archivo del sourceDir al targetDir
     const copyFile = (filePath) => {
         const fileName = path.basename(filePath);
         const destPath = path.join(targetDir, fileName);
@@ -277,27 +275,27 @@ function startHLSWatcher(sourceDir, targetDir) {
         });
     };
 
-    // Cuando se agrega un archivo nuevo o se modifica (aplica para .ts y .m3u8)
+    // Cuando se agrega un nuevo .ts, también copiamos el .m3u8
     watcher.on('add', (filePath) => {
-        if (filePath.endsWith('.ts') || filePath.endsWith('.m3u8')) {
-            console.log(`[HLS Watcher] Evento ADD detectado para: ${path.basename(filePath)}`);
+        if (filePath.endsWith('.ts')) {
+            console.log(`[HLS Watcher] Nuevo segmento detectado: ${path.basename(filePath)}`);
             copyFile(filePath);
+
+            setTimeout(() => {
+                const m3u8Path = path.join(sourceDir, 'index.m3u8');
+                if (fs.existsSync(m3u8Path)) {
+                    copyFile(m3u8Path);
+                } else {
+                    console.warn("[HLS Watcher] No se encontró index.m3u8 para copiar.");
+                }
+            }, 500);
         }
     });
-
-    watcher.on('change', (filePath) => {
-        if (filePath.endsWith('.ts') || filePath.endsWith('.m3u8')) {
-            console.log(`[HLS Watcher] Evento CHANGE detectado para: ${path.basename(filePath)}`);
-            copyFile(filePath);
-        }
-    });
-
 
     watcher.on('error', (error) => {
         console.error('[HLS Watcher] Error:', error);
     });
 }
-
 module.exports = {
     generateStreamThumbnail: generateStreamThumbnail,
     uploadStream: uploadStream,
