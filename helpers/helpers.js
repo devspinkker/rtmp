@@ -258,11 +258,12 @@ function startHLSWatcher(sourceDir, targetDir) {
         persistent: true,
         ignoreInitial: false,
         awaitWriteFinish: {
-            stabilityThreshold: 2000, // Espera 2 segundos para confirmar que el archivo se escribió por completo
-            pollInterval: 100
-        }
+            stabilityThreshold: 2000,
+            pollInterval: 100,
+        },
     });
 
+    // Copia los segmentos .ts
     const copyFile = (filePath) => {
         const fileName = path.basename(filePath);
         const destPath = path.join(targetDir, fileName);
@@ -275,27 +276,43 @@ function startHLSWatcher(sourceDir, targetDir) {
         });
     };
 
-    // Cuando se agrega un nuevo .ts, también copiamos el .m3u8
-    watcher.on('add', (filePath) => {
-        if (filePath.endsWith('.ts')) {
+    // El archivo final del VOD se llamará "index.m3u8"
+    const vodM3U8Path = path.join(targetDir, "index.m3u8");
+
+    // Escucha cuando se agrega un nuevo archivo .ts
+    watcher.on("add", (filePath) => {
+        if (filePath.endsWith(".ts")) {
             console.log(`[HLS Watcher] Nuevo segmento detectado: ${path.basename(filePath)}`);
             copyFile(filePath);
 
             setTimeout(() => {
-                const m3u8Path = path.join(sourceDir, 'index.m3u8');
+                const m3u8Path = path.join(sourceDir, "index.m3u8");
                 if (fs.existsSync(m3u8Path)) {
-                    copyFile(m3u8Path);
+                    updateVODM3U8(m3u8Path, vodM3U8Path);
                 } else {
-                    console.warn("[HLS Watcher] No se encontró index.m3u8 para copiar.");
+                    console.warn("[HLS Watcher] No se encontró index.m3u8 para actualizar.");
                 }
             }, 500);
         }
     });
 
-    watcher.on('error', (error) => {
-        console.error('[HLS Watcher] Error:', error);
+    watcher.on("error", (error) => {
+        console.error("[HLS Watcher] Error:", error);
     });
 }
+// Función para actualizar el VOD "index.m3u8"
+const updateVODM3U8 = (liveM3U8Path, vodM3U8Path) => {
+    const liveContent = fs.readFileSync(liveM3U8Path, "utf8");
+    const vodContent = fs.existsSync(vodM3U8Path) ? fs.readFileSync(vodM3U8Path, "utf8") : "";
+
+    const liveLines = liveContent.split("\n").filter(line => line.trim() !== "");
+    const vodLines = new Set(vodContent.split("\n").filter(line => line.trim() !== ""));
+
+    liveLines.forEach(line => vodLines.add(line));
+
+    fs.writeFileSync(vodM3U8Path, Array.from(vodLines).join("\n"));
+    console.log(`[HLS Watcher] index.m3u8 (VOD) actualizado con nuevos segmentos.`);
+};
 module.exports = {
     generateStreamThumbnail: generateStreamThumbnail,
     uploadStream: uploadStream,
