@@ -288,22 +288,28 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       '-c:v', 'copy',                // Copia el video sin re-codificar para MP4
       '-c:a', 'aac',                 // Transcodifica el audio a AAC
       '-b:a', '128k',                // Bitrate del audio
-      '-preset', 'ultrafast',        // Preset rápido
+      '-preset', 'ultrafast',        // Usa el preset más rápido
+      '-flush_packets', '1',         // Vaciar paquetes inmediatamente
+
 
       // Salida .mp4
       mp4OutputPath,
+
       // Salida HLS
       '-f', 'hls',                   // Especifica formato HLS
-      '-hls_time', '7',             // Duración de cada segmento
-      '-hls_list_size', '0',         // Incluye todos los segmentos en `index.m3u8`
-      '-hls_flags', 'append_list',
+      '-hls_time', '7',              // Duración de cada segmento (1 segundo)
+      '-hls_list_size', '0',         // Incluye todos los segmentos en index.m3u8
+      '-hls_flags', 'split_by_time', // Fragmenta por tiempo (si es necesario)
       HlsOutputPath,
     ]);
 
 
-    // ffmpegProcess.stderr.on('data', (data) => {
-    //   console.log(`[FFmpeg] ${data}`);
-    // });
+    ffmpegProcess.stderr.on('data', (data) => {
+      console.log(`[FFmpeg] ${data.toString()}`);
+    });
+    ffmpegProcess.on('exit', (code, signal) => {
+      console.log(`[FFmpeg] Proceso finalizado con código: ${code}, señal: ${signal}`);
+    });
 
     ffmpegProcess.on('close', (code) => {
       console.log(`[Pinkker] [PrePublish] FFmpeg finalizado con código: ${code}`);
