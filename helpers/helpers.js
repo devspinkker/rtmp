@@ -6,6 +6,7 @@ const axios = require("axios");
 const path = require('path');
 const baseURL = process.env.BACKEND_URL;
 const ffmpeg = require('fluent-ffmpeg');
+const chokidar = require('chokidar');
 
 ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH);
 
@@ -235,6 +236,67 @@ async function GetCurrentStreamSummaryForToken(key) {
         return error.response?.data || error;
     }
 }
+/**
+ * Observa la carpeta de salida HLS (donde se generan los .ts y el index.m3u8) y copia cada archivo nuevo o modificado
+ * al directorio destino.
+ *
+ * Se utiliza awaitWriteFinish para esperar a que el archivo se termine de escribir.
+ *
+ * @param {string} sourceDir - Carpeta de salida HLS (por ejemplo, donde se encuentra index.m3u8 y los .ts generados por FFmpeg/NMS).
+ * @param {string} targetDir - Carpeta destino donde se copiarán los archivos (por ejemplo, para el VOD).
+ */
+function startHLSWatcher(sourceDir, targetDir) {
+    // Crear carpeta destino si no existe
+    if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+        console.log(`Directorio destino creado: ${targetDir}`);
+    }
+
+    console.log(`Iniciando watcher en: ${sourceDir}`);
+
+    // Configuración del watcher: se activa en cada adición o cambio, y se espera a que el archivo se escriba completamente.
+    const watcher = chokidar.watch(sourceDir, {
+        persistent: true,
+        ignoreInitial: false,
+        awaitWriteFinish: {
+            stabilityThreshold: 2000, // Espera 2 segundos para confirmar que el archivo se escribió por completo
+            pollInterval: 100
+        }
+    });
+
+    // Función para copiar un archivo del sourceDir al targetDir
+    const copyFile = (filePath) => {
+        const fileName = path.basename(filePath);
+        const destPath = path.join(targetDir, fileName);
+        fs.copyFile(filePath, destPath, (err) => {
+            if (err) {
+                console.error(`[HLS Watcher] Error copiando ${fileName}:`, err);
+            } else {
+                console.log(`[HLS Watcher] Archivo copiado: ${fileName}`);
+            }
+        });
+    };
+
+    // Cuando se agrega un archivo nuevo o se modifica (aplica para .ts y .m3u8)
+    watcher.on('add', (filePath) => {
+        if (filePath.endsWith('.ts') || filePath.endsWith('.m3u8')) {
+            console.log(`[HLS Watcher] Evento ADD detectado para: ${path.basename(filePath)}`);
+            copyFile(filePath);
+        }
+    });
+
+    watcher.on('change', (filePath) => {
+        if (filePath.endsWith('.ts') || filePath.endsWith('.m3u8')) {
+            console.log(`[HLS Watcher] Evento CHANGE detectado para: ${path.basename(filePath)}`);
+            copyFile(filePath);
+        }
+    });
+
+
+    watcher.on('error', (error) => {
+        console.error('[HLS Watcher] Error:', error);
+    });
+}
 
 module.exports = {
     generateStreamThumbnail: generateStreamThumbnail,
@@ -244,5 +306,6 @@ module.exports = {
     getLastTsFiles: getLastTsFiles,
     getStreamByUserName,
     validate_stream_access,
-    GetCurrentStreamSummaryForToken
+    GetCurrentStreamSummaryForToken,
+    startHLSWatcher,
 };

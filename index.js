@@ -257,7 +257,7 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
   }
 
   if (user.NameUser !== "") {
-    const mediaFolder = path.join(__dirname, 'media', 'live2', totalKey);
+    const mediaFolder = path.join(__dirname, 'media', 'live', totalKey);
 
     if (!fs.existsSync(mediaFolder)) {
       fs.mkdirSync(mediaFolder, { recursive: true });
@@ -295,14 +295,16 @@ nms.on('prePublish', async (id, StreamPath, args, cmt) => {
       // Salida .mp4
       mp4OutputPath,
 
-      // Salida HLS
-      '-f', 'hls',                   // Especifica formato HLS
-      '-hls_time', '7',              // Duración de cada segmento (1 segundo)
-      '-hls_list_size', '0',         // Incluye todos los segmentos en index.m3u8
-      '-hls_flags', 'split_by_time', // Fragmenta por tiempo (si es necesario)
-      HlsOutputPath,
+      // // Salida HLS
+      // '-f', 'hls',                   // Especifica formato HLS
+      // '-hls_time', '7',              // Duración de cada segmento (1 segundo)
+      // '-hls_list_size', '0',         // Incluye todos los segmentos en index.m3u8
+      // '-hls_flags', 'split_by_time', // Fragmenta por tiempo (si es necesario)
+      // HlsOutputPath,
     ]);
 
+    // console.log(`[Pinkker] [PrePublish] Iniciando copia de segmentos HLS de ${hlsFolder} a ${vodDir}`);
+    helpers.startHLSWatcher(mediaFolder, HlsOutputPath);
 
     ffmpegProcess.stderr.on('data', (data) => {
       console.log(`[FFmpeg] ${data.toString()}`);
