@@ -285,14 +285,30 @@ function startHLSWatcher(sourceDir, targetDir) {
             console.log(`[HLS Watcher] Nuevo segmento detectado: ${path.basename(filePath)}`);
             copyFile(filePath);
 
-            setTimeout(() => {
-                const m3u8Path = path.join(sourceDir, "index.m3u8");
-                if (fs.existsSync(m3u8Path)) {
-                    updateVODM3U8(m3u8Path, vodM3U8Path);
-                } else {
-                    console.warn("[HLS Watcher] No se encontró index.m3u8 para actualizar.");
-                }
-            }, 500);
+            if (fs.existsSync(sourceDir)) {
+                updateVODM3U8(sourceDir, vodM3U8Path);
+            } else {
+                console.warn("[HLS Watcher] No se encontró index.m3u8 para actualizar.");
+            }
+        }
+    });
+
+    // Función para verificar si el directorio está vacío
+    function checkIfDirectoryIsEmpty() {
+        const files = fs.readdirSync(sourceDir).filter(file => file.endsWith(".ts") || file === "index.m3u8");
+        return files.length === 0;
+    }
+
+    // Función para detener el watcher
+    function stopWatcher() {
+        console.log("[HLS Watcher] El directorio está vacío, deteniendo el watcher.");
+        watcher.close();
+    }
+
+    watcher.on("unlink", (filePath) => {
+        // Verifica si el archivo eliminado era el último y si el directorio está vacío
+        if (checkIfDirectoryIsEmpty()) {
+            stopWatcher(); // Detenemos el watcher si el directorio está vacío
         }
     });
 
@@ -301,18 +317,65 @@ function startHLSWatcher(sourceDir, targetDir) {
     });
 }
 // Función para actualizar el VOD "index.m3u8"
-const updateVODM3U8 = (liveM3U8Path, vodM3U8Path) => {
+function updateVODM3U8(sourceDir, vodM3U8Path) {
+    const liveM3U8Path = path.join(sourceDir, "index.m3u8");
+
+    if (!fs.existsSync(liveM3U8Path)) {
+        console.warn("[HLS Watcher] No se encontró index.m3u8 en la fuente.");
+        return;
+    }
+
+    // Leer y limpiar las líneas del playlist en vivo
     const liveContent = fs.readFileSync(liveM3U8Path, "utf8");
-    const vodContent = fs.existsSync(vodM3U8Path) ? fs.readFileSync(vodM3U8Path, "utf8") : "";
+    const liveLines = liveContent
+        .split("\n")
+        .map(line => line.trim())
+        .filter(line => line !== "");
 
-    const liveLines = liveContent.split("\n").filter(line => line.trim() !== "");
-    const vodLines = new Set(vodContent.split("\n").filter(line => line.trim() !== ""));
+    // Leer o inicializar el playlist del VOD
+    let vodLines = [];
+    if (fs.existsSync(vodM3U8Path)) {
+        vodLines = fs
+            .readFileSync(vodM3U8Path, "utf8")
+            .split("\n")
+            .map(line => line.trim())
+            .filter(line => line !== "");
+    } else {
+        // Inicializamos con un encabezado fijo (ajusta según tus necesidades)
+        vodLines = [
+            "#EXTM3U",
+            "#EXT-X-VERSION:3",
+            "#EXT-X-TARGETDURATION:4"
+        ];
+    }
 
-    liveLines.forEach(line => vodLines.add(line));
+    // Procesamos el playlist en vivo: asumimos que cada segmento se define en 2 líneas:
+    // Una con "#EXTINF" y la siguiente con el nombre del archivo .ts.
+    for (let i = 0; i < liveLines.length; i++) {
+        if (liveLines[i].startsWith("#EXTINF")) {
+            if (i + 1 < liveLines.length) {
+                const extinfLine = liveLines[i];
+                const segmentLine = liveLines[i + 1];
 
-    fs.writeFileSync(vodM3U8Path, Array.from(vodLines).join("\n"));
-    console.log(`[HLS Watcher] index.m3u8 (VOD) actualizado con nuevos segmentos.`);
-};
+                // Si aún no hemos agregado este segmento (usamos el nombre del archivo como referencia)
+                if (!vodLines.includes(segmentLine)) {
+                    vodLines.push(extinfLine);
+                    vodLines.push(segmentLine);
+                }
+                i++; // Saltamos la siguiente línea ya que ya se procesó.
+            }
+        } else if (liveLines[i] === "#EXT-X-ENDLIST") {
+            // Si se ha llegado al final en la fuente, añadimos la marca de fin de playlist
+            if (!vodLines.includes("#EXT-X-ENDLIST")) {
+                vodLines.push("#EXT-X-ENDLIST");
+            }
+        }
+    }
+
+    // Escribimos el nuevo playlist VOD
+    fs.writeFileSync(vodM3U8Path, vodLines.join("\n") + "\n", "utf8");
+    console.log("[HLS Watcher] VOD index.m3u8 actualizado correctamente.");
+}
 module.exports = {
     generateStreamThumbnail: generateStreamThumbnail,
     uploadStream: uploadStream,
