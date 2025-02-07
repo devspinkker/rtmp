@@ -131,7 +131,7 @@ const uploadStream = async (file_name, stream_key) => {
 function cleanOldHLS() {
     const baseDir = path.join(__dirname, '../media', 'storage', 'live2');
     const now = Date.now();
-    const maxAge = 6 * 24 * 60 * 60 * 1000; // 6 días en milisegundos
+    const maxAge = 60 * 24 * 60 * 60 * 1000; // 60 días en milisegundos
     // const maxAge = 1 * 60 * 1000; // 1 minuto en milisegundos
 
 

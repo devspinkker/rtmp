@@ -410,12 +410,6 @@ nms.on('donePublish', async (id, StreamPath, args) => {
 
 app.use(router);
 
-setInterval(() => {
-  console.log('[Pinkker] Iniciando limpieza de carpetas HLS antiguas...');
-  // helpers.cleanOldHLS();
-  // }, 1 * 60 * 1000);
-}, 24 * 60 * 60 * 1000);
-
 nms.run();
 app.listen(8002, () => {
   console.log(`server on port 8002`)
