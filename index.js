@@ -408,6 +408,12 @@ nms.on('donePublish', async (id, StreamPath, args) => {
 });
 
 
+setInterval(() => {
+  console.log('[Pinkker] Iniciando limpieza de carpetas HLS antiguas...');
+  helpers.cleanOldHLS();
+  // }, 1 * 60 * 1000);
+}, 24 * 60 * 60 * 1000);
+
 app.use(router);
 
 nms.run();
